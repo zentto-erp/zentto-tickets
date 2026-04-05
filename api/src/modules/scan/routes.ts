@@ -5,17 +5,39 @@ import { env } from "../../config/env.js";
 
 export const scanRouter = Router();
 
-/**
- * POST /v1/scan/validate
- * Valida un barcode/QR de ticket en puerta.
- * Body: { barcode: string }
- */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 300_000);
+
 scanRouter.post("/validate", async (req: Request, res: Response) => {
   try {
+    const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkRateLimit(clientIp)) {
+      return res.status(429).json({ valid: false, error: "rate_limited" });
+    }
+
     const { barcode } = req.body;
     if (!barcode) return res.status(400).json({ valid: false, error: "missing_barcode" });
 
-    // Formato: ZT-orderId|eventId|seatId|timestamp|hmac
     const raw = String(barcode).replace(/^ZT-/, "");
     const parts = raw.split("|");
     if (parts.length !== 5) {
