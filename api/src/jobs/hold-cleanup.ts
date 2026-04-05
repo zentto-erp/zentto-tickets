@@ -1,4 +1,4 @@
-import { releaseExpiredHolds } from "../modules/events/service.js";
+import { callSp } from "../db/query.js";
 
 const CLEANUP_INTERVAL_MS = 30_000; // 30 segundos
 
@@ -7,7 +7,7 @@ export function startHoldCleanup() {
 
   setInterval(async () => {
     try {
-      const released = await releaseExpiredHolds();
+      const released = await callSp("usp_tkt_event_release_expired", {});
       if (released.length > 0) {
         console.log(`[hold-cleanup] Liberados ${released.length} asientos expirados`);
         // TODO: notificar via WebSocket a clientes conectados

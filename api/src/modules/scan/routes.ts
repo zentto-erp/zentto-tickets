@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
-import { query } from "../../db/pool.js";
+import { callSp } from "../../db/query.js";
 import { env } from "../../config/env.js";
 
 export const scanRouter = Router();
@@ -34,51 +34,21 @@ scanRouter.post("/validate", async (req: Request, res: Response) => {
       return res.json({ valid: false, error: "tampered_barcode" });
     }
 
-    // Buscar ticket en BD
-    const ticket = await query(
-      `SELECT t.*, e."Name" AS "EventName", e."EventDate",
-         s."Name" AS "SectionName", r."Label" AS "RowLabel", st."Number" AS "SeatNumber",
-         o."BuyerName"
-       FROM tkt.ticket t
-       JOIN tkt."order" o ON o."OrderId" = t."OrderId"
-       JOIN tkt.event e ON e."EventId" = t."EventId"
-       LEFT JOIN tkt.seat st ON st."SeatId" = t."SeatId"
-       LEFT JOIN tkt.row r ON r."RowId" = st."RowId"
-       LEFT JOIN tkt.section s ON s."SectionId" = r."SectionId"
-       WHERE t."Barcode" = $1`,
-      [barcode]
-    );
+    // Validate ticket via PL/pgSQL function
+    const rows = await callSp("usp_tkt_scan_validate", { Barcode: barcode });
+    const result = rows[0] as Record<string, unknown>;
 
-    if (!ticket.rows.length) {
-      return res.json({ valid: false, error: "ticket_not_found" });
-    }
-
-    const t = ticket.rows[0];
-
-    if (t.Status === "cancelled") {
-      return res.json({ valid: false, error: "ticket_cancelled", ticket: t });
-    }
-    if (t.ScannedAt) {
+    if (!result?.ok) {
       return res.json({
         valid: false,
-        error: "already_scanned",
-        scannedAt: t.ScannedAt,
-        ticket: t,
+        error: result?.error ?? "ticket_not_found",
+        ...(result?.TicketId ? { ticket: result, scannedAt: result.ScannedAt } : {}),
       });
     }
 
-    // Marcar como escaneado
-    await query(
-      `UPDATE tkt.ticket SET "ScannedAt" = NOW() WHERE "TicketId" = $1`,
-      [t.TicketId]
-    );
-
     return res.json({
       valid: true,
-      ticket: {
-        ...t,
-        scannedAt: new Date().toISOString(),
-      },
+      ticket: result,
     });
   } catch (err: unknown) {
     res.status(500).json({ valid: false, error: String(err) });
