@@ -131,3 +131,13 @@ eventRouter.post("/:id/release", async (req: Request, res: Response) => {
     res.status(500).json({ error: String(err) });
   }
 });
+
+/* ── EVENT SEATMAP ── */
+eventRouter.get("/:id/seatmap", async (req: Request, res: Response) => {
+  try {
+    const data = await svc.getEventSeatMap(Number(req.params.id));
+    res.json(data);
+  } catch (err: unknown) {
+    res.status(500).json({ error: String(err) });
+  }
+});
