@@ -1,6 +1,5 @@
 "use client";
-
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
@@ -9,127 +8,72 @@ import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import Stack from "@mui/material/Stack";
 import Divider from "@mui/material/Divider";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Chip from "@mui/material/Chip";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import WarningIcon from "@mui/icons-material/Warning";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+import KeyboardIcon from "@mui/icons-material/Keyboard";
 import { api } from "@/lib/api";
+import { QrScanner } from "@/components/QrScanner";
 
-interface ScanResult {
-  valid: boolean;
-  error?: string;
-  ticket?: {
-    EventName: string;
-    BuyerName: string;
-    SectionName: string;
-    RowLabel: string;
-    SeatNumber: number;
-    ScannedAt: string;
-  };
-  scannedAt?: string;
-}
+interface STI { EventName: string; EventDate: string; BuyerName: string; SectionName: string; RowLabel: string; SeatNumber: number; VenueName: string; }
+interface SR { valid: boolean; error?: string; ticket?: STI; scannedAt?: string; }
+type SS = "idle" | "scanning" | "valid" | "invalid" | "already_scanned";
 
 export default function ScanPage() {
   const [barcode, setBarcode] = useState("");
-  const [result, setResult] = useState<ScanResult | null>(null);
+  const [result, setResult] = useState<SR | null>(null);
+  const [scanState, setScanState] = useState<SS>("idle");
   const [loading, setLoading] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0);
+  const [scanCount, setScanCount] = useState(0);
 
-  async function handleScan() {
-    if (!barcode.trim()) return;
-    setLoading(true);
-    setResult(null);
-
+  const validate = useCallback(async (code: string) => {
+    if (!code.trim() || loading) return;
+    setLoading(true); setResult(null); setScanState("scanning");
     try {
-      const res = await api.post<ScanResult>("/v1/scan/validate", { barcode: barcode.trim() });
+      const res = await api.post<SR>("/v1/scan/validate", { barcode: code.trim() });
       setResult(res);
-    } catch (err) {
-      setResult({ valid: false, error: String(err) });
-    }
-
+      if (res.valid) { setScanState("valid"); setScanCount((c) => c + 1); }
+      else if (res.error === "already_scanned") setScanState("already_scanned");
+      else setScanState("invalid");
+    } catch (err) { setResult({ valid: false, error: String(err) }); setScanState("invalid"); }
     setLoading(false);
-  }
+  }, [loading]);
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") handleScan();
-  }
+  const reset = () => { setResult(null); setBarcode(""); setScanState("idle"); };
+  const col = scanState === "valid" ? "#10B981" : scanState === "already_scanned" ? "#F59E0B" : scanState === "invalid" ? "#EF4444" : "transparent";
+  const icon = scanState === "valid" ? <CheckCircleIcon sx={{ fontSize: 56, color: "#10B981" }} /> : scanState === "already_scanned" ? <WarningIcon sx={{ fontSize: 56, color: "#F59E0B" }} /> : scanState === "invalid" ? <CancelIcon sx={{ fontSize: 56, color: "#EF4444" }} /> : null;
+  const label = scanState === "valid" ? "VALIDO" : scanState === "already_scanned" ? "YA ESCANEADO" : scanState === "invalid" ? "INVALIDO" : "";
 
   return (
     <Box px={4} py={4} maxWidth={600} mx="auto">
-      <Stack alignItems="center" mb={4}>
-        <QrCodeScannerIcon sx={{ fontSize: 56, color: "primary.main", mb: 1 }} />
-        <Typography variant="h4" fontWeight={700}>Escaneo de Boletos</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Escanea el QR o ingresa el código del boleto
-        </Typography>
+      <Stack alignItems="center" mb={3}>
+        <QrCodeScannerIcon sx={{ fontSize: 48, color: "primary.main", mb: 1 }} />
+        <Typography variant="h4" fontWeight={700}>Scanner de Boletos</Typography>
+        <Typography variant="body2" color="text.secondary">Valida boletos en puerta escaneando el codigo QR</Typography>
+        {scanCount > 0 && <Chip label={`${scanCount} escaneado${scanCount > 1 ? "s" : ""} esta sesion`} size="small" color="primary" variant="outlined" sx={{ mt: 1 }} />}
       </Stack>
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Stack direction="row" gap={1}>
-          <TextField
-            label="Código de barcode / QR"
-            fullWidth
-            autoFocus
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="ZT-123|456|789|..."
-          />
-          <Button
-            variant="contained"
-            onClick={handleScan}
-            disabled={loading}
-            sx={{ minWidth: 120 }}
-          >
-            {loading ? "..." : "Validar"}
-          </Button>
-        </Stack>
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={tabIndex} onChange={(_, v) => { setTabIndex(v); reset(); }} variant="fullWidth">
+          <Tab icon={<QrCodeScannerIcon />} label="Camara QR" />
+          <Tab icon={<KeyboardIcon />} label="Manual" />
+        </Tabs>
+        <Box p={3}>
+          {tabIndex === 0 && <QrScanner onScan={(d) => { setBarcode(d); validate(d); }} enabled={scanState === "idle" || scanState === "scanning"} />}
+          {tabIndex === 1 && <Stack direction="row" gap={1}><TextField label="Codigo de barcode / QR" fullWidth autoFocus value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && validate(barcode)} placeholder="ZT-123|456|789|..." /><Button variant="contained" onClick={() => validate(barcode)} disabled={loading} sx={{ minWidth: 120 }}>{loading ? "..." : "Validar"}</Button></Stack>}
+        </Box>
       </Paper>
-
-      {result && (
-        <Paper sx={{ p: 3, borderLeft: `4px solid ${result.valid ? "#10B981" : "#EF4444"}` }}>
-          <Stack direction="row" alignItems="center" gap={1} mb={2}>
-            {result.valid ? (
-              <CheckCircleIcon sx={{ fontSize: 40, color: "#10B981" }} />
-            ) : (
-              <CancelIcon sx={{ fontSize: 40, color: "#EF4444" }} />
-            )}
-            <Typography variant="h5" fontWeight={700} color={result.valid ? "#10B981" : "#EF4444"}>
-              {result.valid ? "VÁLIDO" : "INVÁLIDO"}
-            </Typography>
-          </Stack>
-
-          {result.valid && result.ticket && (
-            <>
-              <Divider sx={{ my: 2 }} />
-              <Stack spacing={1}>
-                <Typography><strong>Evento:</strong> {result.ticket.EventName}</Typography>
-                <Typography><strong>Nombre:</strong> {result.ticket.BuyerName}</Typography>
-                <Typography><strong>Ubicación:</strong> {result.ticket.SectionName} — Fila {result.ticket.RowLabel}, Asiento {result.ticket.SeatNumber}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Escaneado: {new Date().toLocaleString("es")}
-                </Typography>
-              </Stack>
-            </>
-          )}
-
-          {!result.valid && result.error && (
-            <Alert severity="error" sx={{ mt: 1 }}>
-              {result.error === "already_scanned" && `Este boleto ya fue escaneado el ${result.scannedAt}`}
-              {result.error === "ticket_cancelled" && "Este boleto fue cancelado"}
-              {result.error === "ticket_not_found" && "Boleto no encontrado en el sistema"}
-              {result.error === "tampered_barcode" && "Código manipulado — posible fraude"}
-              {result.error === "invalid_format" && "Formato de código inválido"}
-              {!["already_scanned", "ticket_cancelled", "ticket_not_found", "tampered_barcode", "invalid_format"].includes(result.error) && result.error}
-            </Alert>
-          )}
-
-          <Button
-            fullWidth
-            variant="outlined"
-            sx={{ mt: 2 }}
-            onClick={() => { setResult(null); setBarcode(""); }}
-          >
-            Escanear otro
-          </Button>
+      {result && scanState !== "idle" && scanState !== "scanning" && (
+        <Paper sx={{ p: 3, borderLeft: `4px solid ${col}`, bgcolor: scanState === "valid" ? "rgba(16,185,129,0.05)" : scanState === "already_scanned" ? "rgba(245,158,11,0.05)" : "rgba(239,68,68,0.05)" }}>
+          <Stack direction="row" alignItems="center" gap={1.5} mb={2}>{icon}<Typography variant="h4" fontWeight={800} color={col}>{label}</Typography></Stack>
+          {result.ticket && (scanState === "valid" || scanState === "already_scanned") && (<><Divider sx={{ my: 2 }} /><Stack spacing={1}><Typography variant="h6" fontWeight={600}>{result.ticket.EventName}</Typography>{result.ticket.EventDate && <Typography variant="body2" color="text.secondary">{new Date(result.ticket.EventDate).toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Typography>}{result.ticket.VenueName && <Typography variant="body2" color="text.secondary">{result.ticket.VenueName}</Typography>}<Divider /><Stack direction="row" gap={3} flexWrap="wrap"><Box><Typography variant="caption" color="text.secondary">Comprador</Typography><Typography variant="body2" fontWeight={600}>{result.ticket.BuyerName}</Typography></Box>{result.ticket.SectionName && <Box><Typography variant="caption" color="text.secondary">Seccion</Typography><Typography variant="body2" fontWeight={600}>{result.ticket.SectionName}</Typography></Box>}{result.ticket.RowLabel && <Box><Typography variant="caption" color="text.secondary">Fila</Typography><Typography variant="body2" fontWeight={600}>{result.ticket.RowLabel}</Typography></Box>}{result.ticket.SeatNumber != null && <Box><Typography variant="caption" color="text.secondary">Asiento</Typography><Typography variant="body2" fontWeight={600}>{result.ticket.SeatNumber}</Typography></Box>}</Stack></Stack></>)}
+          {scanState === "already_scanned" && result.scannedAt && <Alert severity="warning" sx={{ mt: 2 }}>Este boleto ya fue escaneado el {new Date(result.scannedAt).toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Alert>}
+          {scanState === "invalid" && result.error && <Alert severity="error" sx={{ mt: 1 }}>{result.error === "ticket_cancelled" ? "Este boleto fue cancelado" : result.error === "ticket_not_found" ? "Boleto no encontrado" : result.error === "tampered_barcode" ? "Codigo manipulado — posible fraude" : result.error === "invalid_format" ? "Formato invalido" : result.error === "rate_limited" ? "Demasiados intentos" : result.error === "order_not_paid" ? "Orden no pagada" : result.error}</Alert>}
+          <Button fullWidth variant="outlined" sx={{ mt: 3 }} onClick={reset}>Escanear otro boleto</Button>
         </Paper>
       )}
     </Box>
