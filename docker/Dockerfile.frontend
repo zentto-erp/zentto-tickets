@@ -2,11 +2,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:4700
-ARG NEXT_PUBLIC_ZENTTO_API_URL=http://localhost:4000
+ARG NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
+ARG NEXT_PUBLIC_AUTH_URL=https://auth.zentto.net
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_ZENTTO_API_URL=$NEXT_PUBLIC_ZENTTO_API_URL
+ENV NEXT_PUBLIC_AUTH_URL=$NEXT_PUBLIC_AUTH_URL
 
 COPY frontend/package*.json ./
 RUN npm ci
@@ -21,8 +21,16 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/public ./public 2>/dev/null || true
 
 EXPOSE 3300
+
+# Variables de entorno requeridas en runtime (via --env-file):
+#   AUTH_SECRET=<secreto NextAuth>
+#   AUTH_TRUST_HOST=true
+#   NEXTAUTH_URL=https://tickets.zentto.net
+#   AUTH_SERVICE_URL=http://zentto-auth:4600
+#   NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
+#   NEXT_PUBLIC_AUTH_URL=https://auth.zentto.net
 
 CMD ["npx", "next", "start", "-p", "3300"]

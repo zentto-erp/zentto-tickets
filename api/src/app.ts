@@ -15,9 +15,11 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: [
+    // Dev local
     "http://localhost:3300",
     "http://localhost:3000",
-    /\.zentto\.net$/,
+    // Producción y dev — cualquier subdominio zentto.net
+    /^https:\/\/[a-z0-9-]+\.zentto\.net$/,
   ],
   credentials: true,
 }));
@@ -29,7 +31,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "zentto-tickets", timestamp: new Date().toISOString() });
 });
 
-/* ── Rutas protegidas (JWT de zentto-web) ── */
+/* ── Rutas protegidas (JWT de zentto-auth) ── */
 app.use("/v1/venues", requireJwt, venueRouter);
 app.use("/v1/events", requireJwt, eventRouter);
 app.use("/v1/orders", requireJwt, orderRouter);

@@ -17,4 +17,17 @@ COPY --from=builder /app/package.json ./
 
 EXPOSE 4700
 
+# Variables de entorno requeridas en runtime (via --env-file):
+#   PORT=4700
+#   JWT_SECRET=<mismo que zentto-auth>
+#   PG_HOST=172.19.0.1  (gateway Docker)
+#   PG_PORT=5432
+#   PG_DATABASE=zentto_tickets
+#   PG_USER=zentto_app
+#   PG_PASSWORD=<secreto>
+#   REDIS_URL=redis://...
+#   AUTH_SERVICE_URL=http://zentto-auth:4600
+#   NOTIFY_URL=https://notify.zentto.net
+#   NOTIFY_API_KEY=zntfy_...
+
 CMD ["node", "dist/index.js"]

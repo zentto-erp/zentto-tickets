@@ -17,20 +17,40 @@ export interface AuthenticatedRequest extends Request {
 const PUBLIC_PATHS = new Set(["/health", "/ws"]);
 
 /**
- * Middleware que valida JWT emitido por zentto-web auth microservice.
- * El token viene en Authorization: Bearer <token>.
- * Headers opcionales: x-company-id, x-branch-id para override de scope.
+ * Middleware que valida JWT emitido por zentto-auth microservice.
+ * Acepta token via:
+ *   - Header: Authorization: Bearer <token>
+ *   - Cookie: zentto_access=<token>
+ *
+ * Headers opcionales para override de scope:
+ *   - x-company-id, x-branch-id
  */
 export function requireJwt(req: Request, res: Response, next: NextFunction) {
   if (PUBLIC_PATHS.has(req.path)) return next();
 
+  // Extraer token de header o cookie
+  let token: string | undefined;
+
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  }
+
+  // Fallback: cookie zentto_access (emitida por zentto-auth)
+  if (!token && req.headers.cookie) {
+    const cookies = req.headers.cookie.split(";").reduce((acc, c) => {
+      const [k, v] = c.trim().split("=");
+      if (k && v) acc[k] = v;
+      return acc;
+    }, {} as Record<string, string>);
+    token = cookies["zentto_access"];
+  }
+
+  if (!token) {
     return res.status(401).json({ error: "missing_token" });
   }
 
   try {
-    const token = authHeader.slice(7);
     const payload = verifyJwt(token);
 
     const companyIdHeader = req.headers["x-company-id"];

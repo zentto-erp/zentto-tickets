@@ -14,8 +14,8 @@ import StadiumIcon from "@mui/icons-material/Stadium";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [usuario, setUsuario] = useState("");
-  const [clave, setClave] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,8 +25,8 @@ export default function LoginPage() {
     setLoading(true);
 
     const result = await signIn("credentials", {
-      usuario,
-      clave,
+      username,
+      password,
       redirect: false,
     });
 
@@ -56,8 +56,8 @@ export default function LoginPage() {
               label="Usuario"
               fullWidth
               margin="normal"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               autoFocus
               required
             />
@@ -66,8 +66,8 @@ export default function LoginPage() {
               type="password"
               fullWidth
               margin="normal"
-              value={clave}
-              onChange={(e) => setClave(e.target.value)}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
             />
             <Button

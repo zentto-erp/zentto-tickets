@@ -3,15 +3,17 @@ import { getSession } from "next-auth/react";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4700";
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const session = await getSession() as { accessToken?: string } | null;
+  const session = await getSession() as Record<string, unknown> | null;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+
+  // Token JWT de zentto-auth (almacenado en NextAuth session)
   if (session?.accessToken) {
     headers["Authorization"] = `Bearer ${session.accessToken}`;
   }
 
-  // Company/branch from localStorage
+  // Company/branch context desde localStorage
   try {
     const stored = localStorage.getItem("zentto-active-company");
     if (stored) {
@@ -21,7 +23,7 @@ async function authHeaders(): Promise<Record<string, string>> {
       if (company.timeZone) headers["x-timezone"] = company.timeZone;
       if (company.countryCode) headers["x-country-code"] = company.countryCode;
     }
-  } catch { /* ignore */ }
+  } catch { /* SSR or no localStorage */ }
 
   return headers;
 }
@@ -31,12 +33,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    credentials: "include", // enviar cookies zentto_access si existen
     body: body ? JSON.stringify(body) : undefined,
   });
 
   if (res.status === 401) {
-    // Auto-signout if token expired
-    window.location.href = "/api/auth/signout";
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     throw new Error("session_expired");
   }
 

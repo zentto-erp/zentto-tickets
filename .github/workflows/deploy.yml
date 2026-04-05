@@ -1,26 +1,17 @@
 # Zentto Tickets — Deploy to Production
-# Push a main → build Docker → deploy al servidor
-# Basado en zentto-infra/templates/deploy-workflow.yml
+# Push a main → build Docker :latest → deploy prod
+# Push a developer → build Docker :dev → deploy dev
 
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, developer]
   workflow_dispatch:
 
 concurrency:
-  group: deploy
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
-
-env:
-  APP_NAME_API: zentto-tickets-api
-  APP_NAME_FRONTEND: zentto-tickets-frontend
-  IMAGE_API: ghcr.io/zentto-erp/zentto-tickets/api:latest
-  IMAGE_FRONTEND: ghcr.io/zentto-erp/zentto-tickets/frontend:latest
-  NETWORK: zentto_zentto-net
-  ENV_FILE_API: /opt/zentto/.env.tickets-api
-  ENV_FILE_FRONTEND: /opt/zentto/.env.tickets-frontend
 
 jobs:
   build:
@@ -29,6 +20,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      TAG: ${{ github.ref_name == 'main' && 'latest' || 'dev' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,9 +39,9 @@ jobs:
           context: .
           file: docker/Dockerfile.api
           push: true
-          tags: ${{ env.IMAGE_API }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
+          tags: ghcr.io/zentto-erp/zentto-tickets/api:${{ env.TAG }}
+          cache-from: type=gha,scope=api-${{ env.TAG }}
+          cache-to: type=gha,mode=max,scope=api-${{ env.TAG }}
 
       # Build Frontend
       - uses: docker/build-push-action@v5
@@ -56,17 +49,23 @@ jobs:
           context: .
           file: docker/Dockerfile.frontend
           push: true
-          tags: ${{ env.IMAGE_FRONTEND }}
+          tags: ghcr.io/zentto-erp/zentto-tickets/frontend:${{ env.TAG }}
           build-args: |
-            NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
-            NEXT_PUBLIC_ZENTTO_API_URL=https://api.zentto.net
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+            NEXT_PUBLIC_API_URL=${{ github.ref_name == 'main' && 'https://tickets-api.zentto.net' || 'https://ticketsapidev.zentto.net' }}
+            NEXT_PUBLIC_AUTH_URL=${{ github.ref_name == 'main' && 'https://auth.zentto.net' || 'https://authdev.zentto.net' }}
+          cache-from: type=gha,scope=frontend-${{ env.TAG }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ env.TAG }}
 
   deploy:
     name: Deploy to Server
     needs: build
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name == 'main' && 'latest' || 'dev' }}
+      SUFFIX: ${{ github.ref_name == 'main' && '' || '-dev' }}
+      API_PORT: ${{ github.ref_name == 'main' && '4700' || '4710' }}
+      FE_PORT: ${{ github.ref_name == 'main' && '3300' || '3310' }}
+      ENV_DIR: ${{ github.ref_name == 'main' && '/opt/zentto' || '/opt/zentto-dev' }}
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -76,41 +75,47 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            echo "=== Deploy Zentto Tickets ==="
+            echo "=== Deploy Zentto Tickets (${{ env.TAG }}) ==="
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # ── API ──
-            docker pull ${{ env.IMAGE_API }}
-            docker stop ${{ env.APP_NAME_API }} 2>/dev/null || true
-            docker rm ${{ env.APP_NAME_API }} 2>/dev/null || true
+            CONTAINER_API="zentto-tickets-api${{ env.SUFFIX }}"
+            IMAGE_API="ghcr.io/zentto-erp/zentto-tickets/api:${{ env.TAG }}"
+
+            docker pull $IMAGE_API
+            docker stop $CONTAINER_API 2>/dev/null || true
+            docker rm $CONTAINER_API 2>/dev/null || true
 
             docker run -d \
-              --name ${{ env.APP_NAME_API }} \
+              --name $CONTAINER_API \
               --restart unless-stopped \
-              --network ${{ env.NETWORK }} \
-              -p 4700:4700 \
-              --env-file ${{ env.ENV_FILE_API }} \
-              ${{ env.IMAGE_API }}
+              --network zentto_zentto-net \
+              -p ${{ env.API_PORT }}:4700 \
+              --env-file ${{ env.ENV_DIR }}/.env.tickets-api \
+              $IMAGE_API
 
             # ── Frontend ──
-            docker pull ${{ env.IMAGE_FRONTEND }}
-            docker stop ${{ env.APP_NAME_FRONTEND }} 2>/dev/null || true
-            docker rm ${{ env.APP_NAME_FRONTEND }} 2>/dev/null || true
+            CONTAINER_FE="zentto-tickets-frontend${{ env.SUFFIX }}"
+            IMAGE_FE="ghcr.io/zentto-erp/zentto-tickets/frontend:${{ env.TAG }}"
+
+            docker pull $IMAGE_FE
+            docker stop $CONTAINER_FE 2>/dev/null || true
+            docker rm $CONTAINER_FE 2>/dev/null || true
 
             docker run -d \
-              --name ${{ env.APP_NAME_FRONTEND }} \
+              --name $CONTAINER_FE \
               --restart unless-stopped \
-              --network ${{ env.NETWORK }} \
-              -p 3300:3300 \
-              --env-file ${{ env.ENV_FILE_FRONTEND }} \
-              ${{ env.IMAGE_FRONTEND }}
+              --network zentto_zentto-net \
+              -p ${{ env.FE_PORT }}:3300 \
+              --env-file ${{ env.ENV_DIR }}/.env.tickets-frontend \
+              $IMAGE_FE
 
             docker image prune -f
 
             # Health check API
             sleep 5
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:4700/health" || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:${{ env.API_PORT }}/health" || echo "000")
             [ "$HTTP_CODE" = "200" ] && echo "API health OK" || echo "WARN: API health HTTP $HTTP_CODE"
 
             echo "=== Deploy completado ==="

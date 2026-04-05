@@ -1,8 +1,11 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4700";
-const ZENTTO_API = process.env.ZENTTO_API_URL || process.env.NEXT_PUBLIC_ZENTTO_API_URL || "http://localhost:4000";
+// zentto-auth es el microservicio centralizado de autenticación
+// Todas las apps nuevas (tickets, sites, panel) autentican contra él
+const AUTH_SERVICE = process.env.AUTH_SERVICE_URL
+  || process.env.NEXT_PUBLIC_AUTH_URL
+  || "http://localhost:4600";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -14,42 +17,42 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     CredentialsProvider({
       name: "Zentto",
       credentials: {
-        usuario: { label: "Usuario", type: "text" },
-        clave: { label: "Contraseña", type: "password" },
-        companyId: { label: "CompanyId", type: "text" },
-        branchId: { label: "BranchId", type: "text" },
+        username: { label: "Usuario", type: "text" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) return null;
+
         try {
-          // Autenticar contra zentto-web API (microservicio de auth)
-          const res = await fetch(`${ZENTTO_API}/v1/auth/login`, {
+          // POST /auth/login en zentto-auth microservice
+          const res = await fetch(`${AUTH_SERVICE}/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              usuario: credentials?.usuario,
-              clave: credentials?.clave,
-              companyId: credentials?.companyId ? Number(credentials.companyId) : undefined,
-              branchId: credentials?.branchId ? Number(credentials.branchId) : undefined,
+              username: credentials.username,
+              password: credentials.password,
+              appId: "zentto-tickets",
             }),
           });
 
           if (!res.ok) return null;
 
           const data = await res.json();
-          if (!data.token) return null;
+          if (!data.user) return null;
 
+          // zentto-auth retorna { user, accessToken, refreshToken }
           return {
-            id: data.userId,
-            name: data.userName,
-            email: data.email,
-            accessToken: data.token,
-            isAdmin: data.isAdmin,
-            modulos: data.modulos,
-            permisos: data.permisos,
-            companyAccesses: data.companyAccesses,
-            defaultCompany: data.defaultCompany,
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken,
+            isAdmin: data.user.isAdmin ?? false,
+            roles: data.user.roles ?? [],
+            companyAccesses: data.user.companyAccesses ?? [],
           };
-        } catch {
+        } catch (err) {
+          console.error("[auth] Error autenticando contra zentto-auth:", err);
           return null;
         }
       },
@@ -58,23 +61,77 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.accessToken = (user as Record<string, unknown>).accessToken;
-        token.isAdmin = (user as Record<string, unknown>).isAdmin;
-        token.modulos = (user as Record<string, unknown>).modulos;
-        token.permisos = (user as Record<string, unknown>).permisos;
-        token.companyAccesses = (user as Record<string, unknown>).companyAccesses;
-        token.defaultCompany = (user as Record<string, unknown>).defaultCompany;
+        const u = user as Record<string, unknown>;
+        token.accessToken = u.accessToken;
+        token.refreshToken = u.refreshToken;
+        token.isAdmin = u.isAdmin;
+        token.roles = u.roles;
+        token.companyAccesses = u.companyAccesses;
       }
+
+      // Verificar si el token sigue vigente
+      if (token.accessToken) {
+        try {
+          const payload = JSON.parse(
+            Buffer.from(String(token.accessToken).split(".")[1], "base64").toString()
+          );
+          if (payload.exp && payload.exp * 1000 < Date.now()) {
+            // Token expirado — intentar refresh
+            const refreshed = await refreshAccessToken(
+              String(token.refreshToken)
+            );
+            if (refreshed) {
+              token.accessToken = refreshed.accessToken;
+              token.refreshToken = refreshed.refreshToken ?? token.refreshToken;
+            } else {
+              // No se pudo refrescar — forzar logout
+              token.error = "RefreshAccessTokenError";
+            }
+          }
+        } catch {
+          // Token malformado
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
-      (session as Record<string, unknown>).accessToken = token.accessToken;
-      (session as Record<string, unknown>).isAdmin = token.isAdmin;
-      (session as Record<string, unknown>).modulos = token.modulos;
-      (session as Record<string, unknown>).permisos = token.permisos;
-      (session as Record<string, unknown>).companyAccesses = token.companyAccesses;
-      (session as Record<string, unknown>).defaultCompany = token.defaultCompany;
+      const s = session as Record<string, unknown>;
+      s.accessToken = token.accessToken;
+      s.isAdmin = token.isAdmin;
+      s.roles = token.roles;
+      s.companyAccesses = token.companyAccesses;
+      s.error = token.error;
       return session;
     },
   },
 });
+
+/**
+ * Refresh token contra zentto-auth
+ */
+async function refreshAccessToken(refreshToken: string) {
+  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL
+    || process.env.NEXT_PUBLIC_AUTH_URL
+    || "http://localhost:4600";
+
+  try {
+    const res = await fetch(`${AUTH_SERVICE}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `zentto_refresh=${refreshToken}`,
+      },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return {
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+    };
+  } catch {
+    return null;
+  }
+}
