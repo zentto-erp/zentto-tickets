@@ -5,9 +5,11 @@ WORKDIR /app
 
 ARG NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
 ARG NEXT_PUBLIC_AUTH_URL=https://auth.zentto.net
+ARG NEXT_PUBLIC_ASSET_PREFIX=https://tickets.zentto.net
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_AUTH_URL=$NEXT_PUBLIC_AUTH_URL
+ENV NEXT_PUBLIC_ASSET_PREFIX=$NEXT_PUBLIC_ASSET_PREFIX
 
 COPY frontend/package*.json ./
 RUN npm install --legacy-peer-deps

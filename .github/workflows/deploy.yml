@@ -29,9 +29,11 @@ jobs:
             if [ "$BRANCH" = "main" ]; then
               TAG="latest"; SUFFIX=""; API_PORT="4700"; FE_PORT="3300"; ENV_DIR="/opt/zentto"
               API_URL="https://tickets-api.zentto.net"; AUTH_URL="https://auth.zentto.net"
+              ASSET_PREFIX="https://tickets.zentto.net"
             else
               TAG="dev"; SUFFIX="-dev"; API_PORT="4710"; FE_PORT="3310"; ENV_DIR="/opt/zentto-dev"
               API_URL="https://ticketsapidev.zentto.net"; AUTH_URL="https://authdev.zentto.net"
+              ASSET_PREFIX="https://ticketsdev.zentto.net"
             fi
 
             echo "=== Deploy Zentto Tickets ($TAG) port=$API_PORT/$FE_PORT ==="
@@ -48,6 +50,7 @@ jobs:
             docker build -t zentto-tickets-frontend:$TAG \
               --build-arg NEXT_PUBLIC_API_URL=$API_URL \
               --build-arg NEXT_PUBLIC_AUTH_URL=$AUTH_URL \
+              --build-arg NEXT_PUBLIC_ASSET_PREFIX=$ASSET_PREFIX \
               -f docker/Dockerfile.frontend .
 
             docker stop zentto-tickets-api$SUFFIX 2>/dev/null || true
