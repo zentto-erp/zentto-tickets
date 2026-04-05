@@ -104,6 +104,8 @@ export interface SeatAvailability {
   SeatNumber: number;
   SeatType: string;
   IsAccessible: boolean;
+  Price?: number;
+  Currency?: string;
 }
 
 export interface SectionAvailability {

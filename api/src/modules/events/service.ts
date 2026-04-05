@@ -189,10 +189,14 @@ export async function getSeatAvailability(eventId: number, sectionId?: number) {
     const result = await query(
       `SELECT ei."SeatId", ei."Status", ei."HeldUntil",
          r."Label" AS "RowLabel", st."Number" AS "SeatNumber",
-         st."SeatType", st."IsAccessible"
+         st."SeatType", st."IsAccessible",
+         COALESCE(pz."Price", 0) AS "Price",
+         COALESCE(pz."Currency", 'USD') AS "Currency"
        FROM tkt.event_inventory ei
        JOIN tkt.seat st ON st."SeatId" = ei."SeatId"
        JOIN tkt.row r ON r."RowId" = st."RowId"
+       LEFT JOIN tkt.pricing_zone_section pzs ON pzs."SectionId" = ei."SectionId"
+       LEFT JOIN tkt.pricing_zone pz ON pz."ZoneId" = pzs."ZoneId" AND pz."EventId" = ei."EventId"
        WHERE ei."EventId" = $1 AND ei."SectionId" = $2
        ORDER BY r."SortOrder", st."Number"`,
       [eventId, sectionId]
@@ -281,4 +285,23 @@ export async function releaseExpiredHolds() {
      RETURNING "EventId", "SeatId"`
   );
   return result.rows;
+}
+
+
+/* ── EVENT SEATMAP ── */
+export async function getEventSeatMap(eventId: number) {
+  const ev = await query(`SELECT e.*, v."Name" AS "VenueName", vc."ConfigurationId" FROM tkt.event e JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId" JOIN tkt.venue v ON v."VenueId" = vc."VenueId" WHERE e."EventId" = $1`, [eventId]);
+  if (!ev.rows.length) throw new Error("event_not_found");
+  const event = ev.rows[0];
+  const sections = await query(
+    `SELECT s.*, COALESCE(MIN(pz."Price"), 0) AS "Price", COALESCE(MIN(pz."Currency"), 'USD') AS "Currency",
+       json_agg(json_build_object('RowId', r."RowId", 'Label', r."Label", 'SeatCount', r."SeatCount",
+         'seats', (SELECT json_agg(json_build_object('SeatId', st."SeatId", 'Number', st."Number", 'SeatType', st."SeatType", 'IsAccessible', st."IsAccessible", 'Status', COALESCE(ei."Status", 'available')) ORDER BY st."Number") FROM tkt.seat st LEFT JOIN tkt.event_inventory ei ON ei."SeatId" = st."SeatId" AND ei."EventId" = $1 WHERE st."RowId" = r."RowId")
+       ) ORDER BY r."SortOrder") FILTER (WHERE r."RowId" IS NOT NULL) AS "Rows"
+     FROM tkt.section s LEFT JOIN tkt.row r ON r."SectionId" = s."SectionId"
+     LEFT JOIN tkt.pricing_zone_section pzs ON pzs."SectionId" = s."SectionId"
+     LEFT JOIN tkt.pricing_zone pz ON pz."ZoneId" = pzs."ZoneId" AND pz."EventId" = $1
+     WHERE s."ConfigurationId" = $2 GROUP BY s."SectionId" ORDER BY s."SortOrder"`,
+    [eventId, event.ConfigurationId]);
+  return { event, sections: sections.rows };
 }

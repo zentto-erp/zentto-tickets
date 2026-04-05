@@ -90,3 +90,20 @@ export function useInitializeInventory() {
       api.post<{ success: boolean; seatsCreated: number }>(`/v1/events/${eventId}/initialize-inventory`),
   });
 }
+
+export function useEventSeatMap(eventId: number) {
+  return useQuery({
+    queryKey: ["events", eventId, "seatmap"],
+    queryFn: () => api.get<{
+      event: Event;
+      sections: Array<{
+        SectionId: number;
+        Name: string;
+        Code: string;
+        Price: number;
+        Currency: string;
+      }>;
+    }>("/v1/events/" + eventId + "/seatmap"),
+    enabled: eventId > 0,
+  });
+}
