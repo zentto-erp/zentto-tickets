@@ -1,6 +1,3 @@
-# Zentto Tickets — Deploy
-# Push a developer → deploy dev | Push a main → deploy prod
-
 name: Deploy
 
 on:
@@ -11,13 +8,6 @@ on:
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
-
-env:
-  TAG: ${{ github.ref_name == 'main' && 'latest' || 'dev' }}
-  SUFFIX: ${{ github.ref_name == 'main' && '' || '-dev' }}
-  API_PORT: ${{ github.ref_name == 'main' && '4700' || '4710' }}
-  FE_PORT: ${{ github.ref_name == 'main' && '3300' || '3310' }}
-  ENV_DIR: ${{ github.ref_name == 'main' && '/opt/zentto' || '/opt/zentto-dev' }}
 
 jobs:
   deploy:
@@ -32,30 +22,32 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: TAG,SUFFIX,API_PORT,FE_PORT,ENV_DIR
           script: |
             set -e
-            echo "=== Deploy Zentto Tickets ($TAG) ==="
 
-            # Clonar/actualizar repo
+            TAG="${{ github.ref_name == 'main' && 'latest' || 'dev' }}"
+            SUFFIX="${{ github.ref_name == 'main' && '' || '-dev' }}"
+            API_PORT="${{ github.ref_name == 'main' && '4700' || '4710' }}"
+            FE_PORT="${{ github.ref_name == 'main' && '3300' || '3310' }}"
+            ENV_DIR="${{ github.ref_name == 'main' && '/opt/zentto' || '/opt/zentto-dev' }}"
+            BRANCH="${{ github.ref_name }}"
+
+            echo "=== Deploy Zentto Tickets ($TAG) port=$API_PORT/$FE_PORT ==="
+
             REPO_DIR="/tmp/zentto-tickets-$TAG"
             if [ -d "$REPO_DIR" ]; then
-              cd "$REPO_DIR" && git fetch origin && git reset --hard origin/${{ github.ref_name }}
+              cd "$REPO_DIR" && git fetch origin && git reset --hard origin/$BRANCH
             else
-              git clone -b ${{ github.ref_name }} https://github.com/zentto-erp/zentto-tickets.git "$REPO_DIR"
+              git clone -b $BRANCH https://github.com/zentto-erp/zentto-tickets.git "$REPO_DIR"
               cd "$REPO_DIR"
             fi
 
-            # Build API
             docker build -t zentto-tickets-api:$TAG -f docker/Dockerfile.api .
-
-            # Build Frontend
             docker build -t zentto-tickets-frontend:$TAG \
               --build-arg NEXT_PUBLIC_API_URL=${{ github.ref_name == 'main' && 'https://tickets-api.zentto.net' || 'https://ticketsapidev.zentto.net' }} \
               --build-arg NEXT_PUBLIC_AUTH_URL=${{ github.ref_name == 'main' && 'https://auth.zentto.net' || 'https://authdev.zentto.net' }} \
               -f docker/Dockerfile.frontend .
 
-            # Deploy API
             docker stop zentto-tickets-api$SUFFIX 2>/dev/null || true
             docker rm zentto-tickets-api$SUFFIX 2>/dev/null || true
             docker run -d \
@@ -66,7 +58,6 @@ jobs:
               --env-file ${ENV_DIR}/.env.tickets-api \
               zentto-tickets-api:$TAG
 
-            # Deploy Frontend
             docker stop zentto-tickets-frontend$SUFFIX 2>/dev/null || true
             docker rm zentto-tickets-frontend$SUFFIX 2>/dev/null || true
             docker run -d \
@@ -77,7 +68,6 @@ jobs:
               --env-file ${ENV_DIR}/.env.tickets-frontend \
               zentto-tickets-frontend:$TAG
 
-            # Health check
             sleep 5
             curl -s -o /dev/null -w "API: %{http_code}\n" http://localhost:${API_PORT}/health
             docker image prune -f
