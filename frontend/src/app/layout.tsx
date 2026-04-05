@@ -6,7 +6,7 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
-import { SessionProvider } from "next-auth/react";
+import { SessionProvider, useSession } from "next-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
@@ -61,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <SessionProvider>
+          <CookieSync />
           <QueryClientProvider client={queryClient}>
             <AppRouterCacheProvider>
               <ThemeProvider theme={theme}>
@@ -75,4 +76,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </body>
     </html>
   );
+}
+
+/** Setear cookie HttpOnly zentto_token después del login */
+function CookieSync() {
+  const { status } = useSession();
+  React.useEffect(() => {
+    if (status === 'authenticated') {
+      fetch('/tickets/api/auth/set-token', { method: 'POST', credentials: 'include' }).catch(() => {});
+    }
+  }, [status]);
+  return null;
 }
