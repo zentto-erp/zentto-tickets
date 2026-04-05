@@ -1,5 +1,6 @@
 # ── Build ──
 FROM node:20-alpine AS builder
+LABEL org.opencontainers.image.source="https://github.com/zentto-erp/zentto-tickets"
 WORKDIR /app
 
 ARG NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
