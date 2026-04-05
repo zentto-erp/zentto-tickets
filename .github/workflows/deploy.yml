@@ -25,12 +25,14 @@ jobs:
           script: |
             set -e
 
-            TAG="${{ github.ref_name == 'main' && 'latest' || 'dev' }}"
-            SUFFIX="${{ github.ref_name == 'main' && '' || '-dev' }}"
-            API_PORT="${{ github.ref_name == 'main' && '4700' || '4710' }}"
-            FE_PORT="${{ github.ref_name == 'main' && '3300' || '3310' }}"
-            ENV_DIR="${{ github.ref_name == 'main' && '/opt/zentto' || '/opt/zentto-dev' }}"
             BRANCH="${{ github.ref_name }}"
+            if [ "$BRANCH" = "main" ]; then
+              TAG="latest"; SUFFIX=""; API_PORT="4700"; FE_PORT="3300"; ENV_DIR="/opt/zentto"
+              API_URL="https://tickets-api.zentto.net"; AUTH_URL="https://auth.zentto.net"
+            else
+              TAG="dev"; SUFFIX="-dev"; API_PORT="4710"; FE_PORT="3310"; ENV_DIR="/opt/zentto-dev"
+              API_URL="https://ticketsapidev.zentto.net"; AUTH_URL="https://authdev.zentto.net"
+            fi
 
             echo "=== Deploy Zentto Tickets ($TAG) port=$API_PORT/$FE_PORT ==="
 
@@ -44,8 +46,8 @@ jobs:
 
             docker build -t zentto-tickets-api:$TAG -f docker/Dockerfile.api .
             docker build -t zentto-tickets-frontend:$TAG \
-              --build-arg NEXT_PUBLIC_API_URL=${{ github.ref_name == 'main' && 'https://tickets-api.zentto.net' || 'https://ticketsapidev.zentto.net' }} \
-              --build-arg NEXT_PUBLIC_AUTH_URL=${{ github.ref_name == 'main' && 'https://auth.zentto.net' || 'https://authdev.zentto.net' }} \
+              --build-arg NEXT_PUBLIC_API_URL=$API_URL \
+              --build-arg NEXT_PUBLIC_AUTH_URL=$AUTH_URL \
               -f docker/Dockerfile.frontend .
 
             docker stop zentto-tickets-api$SUFFIX 2>/dev/null || true
