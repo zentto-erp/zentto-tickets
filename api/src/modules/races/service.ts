@@ -184,3 +184,75 @@ export async function recordFinish(registrationId: number, finishTime: string, c
     },
   };
 }
+
+/* ── LEADERBOARD ── */
+
+export async function getLeaderboard(raceId: number, categoryId?: number) {
+  const rows = await callSp("usp_tkt_race_leaderboard", {
+    RaceId: raceId,
+    CategoryId: categoryId ?? null,
+  });
+
+  const entries = rows as Record<string, unknown>[];
+  const leader = entries.find((r) => r.Position === 1);
+  return entries.map((r) => ({
+    registrationId: r.RegistrationId,
+    bibNumber: r.BibNumber,
+    fullName: r.FullName,
+    gender: r.Gender,
+    status: r.Status,
+    finishTime: r.FinishTime,
+    chipTime: r.ChipTime,
+    position: r.Position,
+    categoryPosition: r.CategoryPosition,
+    categoryName: r.CategoryName,
+    categoryId: r.CategoryId,
+    gap: r.ChipTime && leader?.ChipTime ? calculateGap(String(leader.ChipTime), String(r.ChipTime)) : null,
+  }));
+}
+
+function calculateGap(leaderTime: string, runnerTime: string): string {
+  const toMs = (t: string) => {
+    const p = t.split(":");
+    const s = (p[2] || "0").split(".");
+    return (parseInt(p[0]) || 0) * 3600000 + (parseInt(p[1]) || 0) * 60000 + (parseInt(s[0]) || 0) * 1000 + parseInt((s[1] || "0").padEnd(3, "0").slice(0, 3)) || 0;
+  };
+  const diff = toMs(runnerTime) - toMs(leaderTime);
+  if (diff <= 0) return "";
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return m > 0 ? `+${m}:${String(s).padStart(2, "0")}` : `+${s}s`;
+}
+
+/* ── SCAN QR ── */
+
+export async function scanRegistrationQR(barcode: string) {
+  if (!barcode) throw new Error("missing_barcode");
+
+  const rows = await callSp("usp_tkt_race_scan_qr", {
+    Barcode: barcode,
+    JwtSecret: env.jwt.secret,
+  });
+
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "invalid_barcode"));
+
+  return {
+    valid: true,
+    action: result.Action,
+    registration: result,
+  };
+}
+
+/* ── PAYMENT ── */
+
+export async function confirmRacePayment(registrationId: number, paymentRef: string) {
+  const rows = await callSp("usp_tkt_race_confirm_payment", {
+    RegistrationId: registrationId,
+    PaymentRef: paymentRef,
+  });
+
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "registration_not_found"));
+  return { success: true, registration: result };
+}
