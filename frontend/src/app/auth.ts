@@ -41,15 +41,34 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!data.user) return null;
 
           // zentto-auth retorna { user, accessToken, refreshToken }
+          const accessToken = data.accessToken || "";
+          const userId = data.user.userId || data.user.username || "";
+          const userName = data.user.displayName || data.user.username || "";
+
+          // Enriquecer con datos del ERP (permisos, modulos, companies)
+          const ERP_API = process.env.ERP_API_URL || process.env.NEXT_PUBLIC_ERP_API_URL || "http://localhost:4000";
+          let profile: any = {};
+          if (accessToken && ERP_API) {
+            try {
+              const profileRes = await fetch(`${ERP_API}/v1/auth/profile`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+              if (profileRes.ok) profile = await profileRes.json();
+            } catch { /* ERP no disponible — continuar sin enriquecimiento */ }
+          }
+
           return {
-            id: data.user.id,
-            name: data.user.name,
+            id: profile.userId || userId,
+            name: profile.userName || userName,
             email: data.user.email,
-            accessToken: data.accessToken,
+            accessToken,
             refreshToken: data.refreshToken,
-            isAdmin: data.user.isAdmin ?? false,
+            isAdmin: profile.isAdmin ?? data.user.isAdmin ?? false,
             roles: data.user.roles ?? [],
-            companyAccesses: data.user.companyAccesses ?? [],
+            permisos: profile.permisos ?? null,
+            modulos: profile.modulos ?? [],
+            companyAccesses: profile.companyAccesses ?? data.user.companyAccesses ?? [],
+            defaultCompany: profile.defaultCompany ?? null,
           };
         } catch (err) {
           console.error("[auth] Error autenticando contra zentto-auth:", err);
