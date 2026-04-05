@@ -18,6 +18,8 @@ export const env = {
     url: process.env.REDIS_URL || "redis://localhost:6379",
   },
   zenttoApiUrl: process.env.ZENTTO_API_URL || "http://localhost:4000",
+  notifyUrl: process.env.NOTIFY_URL || "https://notify.zentto.net",
+  notifyApiKey: process.env.NOTIFY_API_KEY || "",
   ws: {
     port: parseInt(process.env.WS_PORT || "4701", 10),
   },

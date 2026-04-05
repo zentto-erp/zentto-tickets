@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { query } from "../../db/pool.js";
 import { env } from "../../config/env.js";
+import { notify, TEMPLATES } from "../../notifications/notify.js";
 
 /* ── ORDERS ── */
 
@@ -131,7 +132,51 @@ export async function confirmPayment(orderId: number, paymentRef: string, paymen
   );
 
   if (!result.rows.length) throw new Error("order_not_found_or_already_paid");
-  return { success: true, order: result.rows[0] };
+
+  // Notificar al comprador
+  const paid = result.rows[0];
+  const event = await query(
+    `SELECT e."Name", e."EventDate", v."Name" AS "VenueName"
+     FROM tkt.event e
+     JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
+     JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
+     WHERE e."EventId" = $1`,
+    [paid.EventId]
+  );
+  const ev = event.rows[0];
+  const ticketCount = await query(
+    `SELECT COUNT(*) AS c FROM tkt.ticket WHERE "OrderId" = $1`, [orderId]
+  );
+
+  sendOrderConfirmation(paid, ev, Number(ticketCount.rows[0]?.c ?? 0)).catch(() => {});
+
+  return { success: true, order: paid };
+}
+
+async function sendOrderConfirmation(order: Record<string, unknown>, event: Record<string, unknown>, ticketCount: number) {
+  if (!env.notifyApiKey) return;
+  try {
+    await notify.email.send({
+      to: String(order.BuyerEmail),
+      templateId: TEMPLATES.ORDER_CONFIRMATION,
+      variables: {
+        buyerName: String(order.BuyerName),
+        eventName: String(event.Name),
+        eventDate: new Date(String(event.EventDate)).toLocaleDateString("es", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+          hour: "2-digit", minute: "2-digit",
+        }),
+        venueName: String(event.VenueName),
+        ticketCount: String(ticketCount),
+        total: Number(order.Total).toFixed(2),
+        currency: String(order.Currency),
+        orderId: String(order.OrderId),
+      },
+      track: true,
+    });
+  } catch (err) {
+    console.error("[notify] Error enviando confirmación:", err);
+  }
 }
 
 /* ── CANCEL ── */
@@ -162,6 +207,23 @@ export async function cancelOrder(orderId: number, userId: string) {
     `UPDATE tkt."order" SET "Status" = 'cancelled' WHERE "OrderId" = $1`,
     [orderId]
   );
+
+  // Notificar cancelación
+  const o = order.rows[0];
+  if (env.notifyApiKey && o.BuyerEmail) {
+    const ev = await query(`SELECT "Name" FROM tkt.event WHERE "EventId" = $1`, [o.EventId]);
+    notify.email.send({
+      to: String(o.BuyerEmail),
+      templateId: TEMPLATES.TICKET_CANCELLED,
+      variables: {
+        buyerName: String(o.BuyerName),
+        eventName: String(ev.rows[0]?.Name ?? ""),
+        orderId: String(orderId),
+        total: Number(o.Total).toFixed(2),
+        currency: String(o.Currency),
+      },
+    }).catch(() => {});
+  }
 
   return { success: true };
 }

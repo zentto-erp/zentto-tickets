@@ -1,4 +1,6 @@
 import { query } from "../../db/pool.js";
+import { notify, TEMPLATES } from "../../notifications/notify.js";
+import { env } from "../../config/env.js";
 
 /* ── RACES ── */
 
@@ -147,7 +149,33 @@ export async function registerParticipant(data: Record<string, unknown>) {
     ]
   );
 
-  return { success: true, registration: result.rows[0] };
+  // Notificar inscripción
+  const reg = result.rows[0];
+  if (env.notifyApiKey && f.fullName) {
+    const race = await query(
+      `SELECT r."Distance", r."StartTime", e."Name" AS "EventName", e."EventDate"
+       FROM tkt.race r JOIN tkt.event e ON e."EventId" = r."EventId"
+       WHERE r."RaceId" = $1`, [raceId]
+    );
+    const r = race.rows[0];
+    const cat = await query(`SELECT "Name" FROM tkt.race_category WHERE "CategoryId" = $1`, [f.categoryId]);
+
+    notify.email.send({
+      to: String(f.fullName).includes("@") ? String(f.fullName) : `${userId}@zentto.net`,
+      templateId: TEMPLATES.RACE_REGISTRATION,
+      variables: {
+        fullName: String(f.fullName),
+        eventName: String(r?.EventName ?? ""),
+        distance: String(r?.Distance ?? ""),
+        bibNumber,
+        categoryName: String(cat.rows[0]?.Name ?? ""),
+        eventDate: r?.EventDate ? new Date(String(r.EventDate)).toLocaleDateString("es") : "",
+        startTime: r?.StartTime ? new Date(String(r.StartTime)).toLocaleTimeString("es") : "",
+      },
+    }).catch(() => {});
+  }
+
+  return { success: true, registration: reg };
 }
 
 export async function updateRegistration(registrationId: number, data: Record<string, unknown>) {
