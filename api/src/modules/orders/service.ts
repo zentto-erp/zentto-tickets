@@ -97,7 +97,7 @@ export async function checkout(params: CheckoutParams) {
 
   // Crear tickets con QR
   for (const seat of held.rows) {
-    const barcode = generateBarcode(order.OrderId, eventId, seat.SeatId);
+    const barcode = generateBarcode(Number(order.OrderId), eventId, Number(seat.SeatId));
     await query(
       `INSERT INTO tkt.ticket
         ("OrderId", "EventId", "SeatId", "Barcode", "Price", "Currency", "Status")
