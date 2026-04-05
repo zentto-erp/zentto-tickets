@@ -2,16 +2,24 @@ import { getSession } from "next-auth/react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4700";
 
+// Setear cookie HttpOnly después del login
+let _cookieSet = false;
+async function ensureCookie() {
+  if (_cookieSet) return;
+  try {
+    await fetch("/api/auth/set-token", { method: "POST", credentials: "include" });
+    _cookieSet = true;
+  } catch { /* ignore */ }
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getSession() as Record<string, unknown> | null;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-
-  // Token JWT de zentto-auth (almacenado en NextAuth session)
-  if (session?.accessToken) {
-    headers["Authorization"] = `Bearer ${session.accessToken}`;
-  }
+  // JWT viaja en cookie HttpOnly zentto_token — NO Bearer.
+  // Asegurar que la cookie está seteada.
+  if (session) await ensureCookie();
 
   // Company/branch context desde localStorage
   try {
@@ -33,13 +41,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    credentials: "include", // enviar cookies zentto_access si existen
+    credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
 
   if (res.status === 401) {
+    _cookieSet = false; // Resetear para re-intentar set-token
     if (typeof window !== "undefined") {
-      window.location.href = "/login";
+      // Limpiar cookie antes de redirigir
+      await fetch("/api/auth/set-token", { method: "DELETE", credentials: "include" }).catch(() => {});
+      window.location.href = "/tickets/login";
     }
     throw new Error("session_expired");
   }
