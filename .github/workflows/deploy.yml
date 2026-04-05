@@ -102,7 +102,7 @@ jobs:
               --name ${{ env.APP_NAME_FRONTEND }} \
               --restart unless-stopped \
               --network ${{ env.NETWORK }} \
-              -p 3200:3200 \
+              -p 3300:3300 \
               --env-file ${{ env.ENV_FILE_FRONTEND }} \
               ${{ env.IMAGE_FRONTEND }}
 

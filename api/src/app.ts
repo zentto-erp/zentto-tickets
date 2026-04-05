@@ -15,7 +15,7 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: [
-    "http://localhost:3200",
+    "http://localhost:3300",
     "http://localhost:3000",
     /\.zentto\.net$/,
   ],
