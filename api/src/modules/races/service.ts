@@ -1,4 +1,4 @@
-import { query } from "../../db/pool.js";
+import { callSp } from "../../db/query.js";
 import { notify, TEMPLATES } from "../../notifications/notify.js";
 import { env } from "../../config/env.js";
 
@@ -6,258 +6,253 @@ import { env } from "../../config/env.js";
 
 export async function listRaces(params: { companyId: number; search?: string; page?: number; limit?: number }) {
   const { companyId, search, page = 1, limit = 50 } = params;
-  const offset = (page - 1) * limit;
 
-  const result = await query(
-    `SELECT r.*, e."Name" AS "EventName", e."EventDate", e."Status" AS "EventStatus",
-       COUNT(*) OVER() AS "TotalCount",
-       (SELECT COUNT(*) FROM tkt.race_registration rr WHERE rr."RaceId" = r."RaceId") AS "RegisteredCount"
-     FROM tkt.race r
-     JOIN tkt.event e ON e."EventId" = r."EventId"
-     WHERE e."CompanyId" = $1
-       AND ($2 = '' OR e."Name" ILIKE '%' || $2 || '%' OR r."Distance" ILIKE '%' || $2 || '%')
-     ORDER BY e."EventDate" DESC
-     LIMIT $3 OFFSET $4`,
-    [companyId, search ?? "", limit, offset]
-  );
-  const total = result.rows[0]?.TotalCount ?? 0;
-  return { rows: result.rows, total: Number(total), page, limit };
+  const rows = await callSp("usp_tkt_race_list", {
+    CompanyId: companyId,
+    Search: search ?? "",
+    Page: page,
+    Limit: limit,
+  });
+
+  const total = Number((rows[0] as Record<string, unknown>)?.TotalCount ?? 0);
+  return { rows, total, page, limit };
 }
 
 export async function getRace(raceId: number) {
-  const result = await query(
-    `SELECT r.*, e."Name" AS "EventName", e."EventDate", e."ImageUrl",
-       v."Name" AS "VenueName", v."City"
-     FROM tkt.race r
-     JOIN tkt.event e ON e."EventId" = r."EventId"
-     LEFT JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
-     LEFT JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
-     WHERE r."RaceId" = $1`,
-    [raceId]
-  );
-  return result.rows[0] ?? null;
+  const rows = await callSp("usp_tkt_race_get", { RaceId: raceId });
+  return rows[0] ?? null;
 }
 
 export async function upsertRace(data: Record<string, unknown>) {
-  const { raceId, ...f } = data;
+  const rows = await callSp("usp_tkt_race_upsert", {
+    RaceId: data.raceId ?? null,
+    EventId: data.eventId ?? null,
+    Distance: data.distance ?? null,
+    MaxParticipants: data.maxParticipants ?? 500,
+    RegistrationDeadline: data.registrationDeadline ?? null,
+    StartTime: data.startTime ?? null,
+    RouteMapUrl: data.routeMapUrl ?? null,
+  });
 
-  if (raceId) {
-    const result = await query(
-      `UPDATE tkt.race SET
-        "Distance" = $1, "MaxParticipants" = $2, "RegistrationDeadline" = $3,
-        "StartTime" = $4, "RouteMapUrl" = $5
-       WHERE "RaceId" = $6 RETURNING *`,
-      [f.distance, f.maxParticipants, f.registrationDeadline, f.startTime, f.routeMapUrl, raceId]
-    );
-    return { success: true, race: result.rows[0] };
-  }
-
-  const result = await query(
-    `INSERT INTO tkt.race ("EventId", "Distance", "MaxParticipants", "RegistrationDeadline", "StartTime", "RouteMapUrl")
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [f.eventId, f.distance, f.maxParticipants, f.registrationDeadline, f.startTime, f.routeMapUrl]
-  );
-  return { success: true, race: result.rows[0] };
+  const result = rows[0] as Record<string, unknown>;
+  const race = await getRace(Number(result.RaceId));
+  return { success: true, race };
 }
 
 /* ── CATEGORIES ── */
 
 export async function listCategories(raceId: number) {
-  const result = await query(
-    `SELECT * FROM tkt.race_category WHERE "RaceId" = $1 ORDER BY "AgeMin"`,
-    [raceId]
-  );
-  return result.rows;
+  return callSp("usp_tkt_race_category_list", { RaceId: raceId });
 }
 
 export async function upsertCategory(data: Record<string, unknown>) {
-  const { categoryId, raceId, ...f } = data;
+  const rows = await callSp("usp_tkt_race_category_upsert", {
+    CategoryId: data.categoryId ?? null,
+    RaceId: data.raceId ?? null,
+    Name: data.name ?? null,
+    AgeMin: data.ageMin ?? 0,
+    AgeMax: data.ageMax ?? 99,
+    Gender: data.gender ?? "X",
+    Price: data.price ?? 0,
+    Currency: data.currency ?? "USD",
+  });
 
-  if (categoryId) {
-    const result = await query(
-      `UPDATE tkt.race_category SET
-        "Name" = $1, "AgeMin" = $2, "AgeMax" = $3, "Gender" = $4, "Price" = $5, "Currency" = $6
-       WHERE "CategoryId" = $7 RETURNING *`,
-      [f.name, f.ageMin, f.ageMax, f.gender, f.price, f.currency ?? "USD", categoryId]
-    );
-    return { success: true, category: result.rows[0] };
-  }
-
-  const result = await query(
-    `INSERT INTO tkt.race_category ("RaceId", "Name", "AgeMin", "AgeMax", "Gender", "Price", "Currency")
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [raceId, f.name, f.ageMin, f.ageMax, f.gender ?? "X", f.price, f.currency ?? "USD"]
-  );
-  return { success: true, category: result.rows[0] };
+  const result = rows[0] as Record<string, unknown>;
+  return { success: true, category: result };
 }
 
 /* ── REGISTRATIONS ── */
 
 export async function listRegistrations(params: { raceId: number; status?: string; page?: number; limit?: number }) {
   const { raceId, status, page = 1, limit = 100 } = params;
-  const offset = (page - 1) * limit;
 
-  const result = await query(
-    `SELECT rr.*, rc."Name" AS "CategoryName",
-       COUNT(*) OVER() AS "TotalCount"
-     FROM tkt.race_registration rr
-     LEFT JOIN tkt.race_category rc ON rc."CategoryId" = rr."CategoryId"
-     WHERE rr."RaceId" = $1
-       AND ($2 = '' OR rr."Status" = $2)
-     ORDER BY rr."BibNumber"::INT NULLS LAST
-     LIMIT $3 OFFSET $4`,
-    [raceId, status ?? "", limit, offset]
-  );
-  const total = result.rows[0]?.TotalCount ?? 0;
-  return { rows: result.rows, total: Number(total), page, limit };
+  const rows = await callSp("usp_tkt_race_registration_list", {
+    RaceId: raceId,
+    Status: status ?? "",
+    Page: page,
+    Limit: limit,
+  });
+
+  const total = Number((rows[0] as Record<string, unknown>)?.TotalCount ?? 0);
+  return { rows, total, page, limit };
 }
 
 export async function registerParticipant(data: Record<string, unknown>) {
   const { raceId, userId, ...f } = data;
 
-  // Verificar capacidad
-  const race = await query(
-    `SELECT r."MaxParticipants",
-       (SELECT COUNT(*) FROM tkt.race_registration WHERE "RaceId" = $1) AS "CurrentCount"
-     FROM tkt.race r WHERE r."RaceId" = $1`,
-    [raceId]
-  );
+  const rows = await callSp("usp_tkt_race_register", {
+    RaceId: raceId as number,
+    UserId: userId as string,
+    CategoryId: f.categoryId ?? null,
+    FullName: f.fullName ?? null,
+    IdDocument: f.idDocument ?? null,
+    DateOfBirth: f.dateOfBirth ?? null,
+    Gender: f.gender ?? "X",
+    EmergencyContact: f.emergencyContact ?? null,
+    EmergencyPhone: f.emergencyPhone ?? null,
+    TShirtSize: f.tShirtSize ?? "M",
+  });
 
-  if (!race.rows.length) throw new Error("race_not_found");
-  const { MaxParticipants, CurrentCount } = race.rows[0];
-  if (Number(CurrentCount) >= Number(MaxParticipants)) throw new Error("race_full");
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "registration_failed"));
 
-  // Asignar dorsal
-  const bibResult = await query(
-    `SELECT COALESCE(MAX("BibNumber"::INT), 0) + 1 AS "NextBib"
-     FROM tkt.race_registration WHERE "RaceId" = $1`,
-    [raceId]
-  );
-  const bibNumber = String(bibResult.rows[0].NextBib).padStart(4, "0");
-
-  const result = await query(
-    `INSERT INTO tkt.race_registration
-      ("RaceId", "UserId", "BibNumber", "CategoryId", "FullName", "IdDocument",
-       "DateOfBirth", "Gender", "EmergencyContact", "EmergencyPhone",
-       "TShirtSize", "Status")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'registered')
-     RETURNING *`,
-    [
-      raceId, userId, bibNumber, f.categoryId, f.fullName, f.idDocument,
-      f.dateOfBirth, f.gender, f.emergencyContact, f.emergencyPhone,
-      f.tShirtSize ?? "M",
-    ]
-  );
-
-  // Notificar inscripción
-  const reg = result.rows[0];
+  // Send registration email (fire and forget)
   if (env.notifyApiKey && f.fullName) {
-    const race = await query(
-      `SELECT r."Distance", r."StartTime", e."Name" AS "EventName", e."EventDate"
-       FROM tkt.race r JOIN tkt.event e ON e."EventId" = r."EventId"
-       WHERE r."RaceId" = $1`, [raceId]
-    );
-    const r = race.rows[0];
-    const cat = await query(`SELECT "Name" FROM tkt.race_category WHERE "CategoryId" = $1`, [f.categoryId]);
-
-    notify.email.send({
-      to: String(f.fullName).includes("@") ? String(f.fullName) : `${userId}@zentto.net`,
-      templateId: TEMPLATES.RACE_REGISTRATION,
-      variables: {
-        fullName: String(f.fullName),
-        eventName: String(r?.EventName ?? ""),
-        distance: String(r?.Distance ?? ""),
-        bibNumber,
-        categoryName: String(cat.rows[0]?.Name ?? ""),
-        eventDate: r?.EventDate ? new Date(String(r.EventDate)).toLocaleDateString("es") : "",
-        startTime: r?.StartTime ? new Date(String(r.StartTime)).toLocaleTimeString("es") : "",
-      },
-    }).catch(() => {});
+    sendRegistrationEmail(
+      raceId as number,
+      f,
+      userId as string,
+      String(result.BibNumber)
+    ).catch(() => {});
   }
 
-  return { success: true, registration: reg };
+  return { success: true, registration: result };
+}
+
+async function sendRegistrationEmail(
+  raceId: number,
+  data: Record<string, unknown>,
+  userId: string,
+  bibNumber: string
+) {
+  const races = await callSp("usp_tkt_race_get", { RaceId: raceId });
+  const race = races[0] as Record<string, unknown> | undefined;
+  if (!race) return;
+
+  const cats = await callSp("usp_tkt_race_category_list", { RaceId: raceId });
+  const cat = (cats as Record<string, unknown>[]).find(
+    (c) => Number(c.CategoryId) === Number(data.categoryId)
+  );
+
+  notify.email.send({
+    to: String(data.fullName).includes("@") ? String(data.fullName) : `${userId}@zentto.net`,
+    templateId: TEMPLATES.RACE_REGISTRATION,
+    variables: {
+      fullName: String(data.fullName),
+      eventName: String(race.EventName ?? ""),
+      distance: String(race.Distance ?? ""),
+      bibNumber,
+      categoryName: String(cat?.Name ?? ""),
+      eventDate: race.EventDate ? new Date(String(race.EventDate)).toLocaleDateString("es") : "",
+      startTime: race.StartTime ? new Date(String(race.StartTime)).toLocaleTimeString("es") : "",
+    },
+  }).catch(() => {});
 }
 
 export async function updateRegistration(registrationId: number, data: Record<string, unknown>) {
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  let idx = 1;
+  const rows = await callSp("usp_tkt_race_update_registration", {
+    RegistrationId: registrationId,
+    BibNumber: data.bibNumber ?? null,
+    Status: data.status ?? null,
+    FinishTime: data.finishTime ?? null,
+    ChipTime: data.chipTime ?? null,
+    Position: data.position ?? null,
+    CategoryPosition: data.categoryPosition ?? null,
+  });
 
-  const allowed = ["BibNumber", "Status", "FinishTime", "ChipTime", "Position", "CategoryPosition"];
-  for (const key of allowed) {
-    const camel = key.charAt(0).toLowerCase() + key.slice(1);
-    if (data[camel] !== undefined) {
-      sets.push(`"${key}" = $${idx}`);
-      values.push(data[camel]);
-      idx++;
-    }
-  }
-
-  if (sets.length === 0) return { success: false, message: "no_fields" };
-
-  values.push(registrationId);
-  const result = await query(
-    `UPDATE tkt.race_registration SET ${sets.join(", ")} WHERE "RegistrationId" = $${idx} RETURNING *`,
-    values
-  );
-
-  return { success: true, registration: result.rows[0] };
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) return { success: false, message: String(result?.mensaje ?? "not_found") };
+  return { success: true, registration: result };
 }
 
 /* ── RESULTS ── */
 
 export async function getResults(raceId: number, categoryId?: number) {
-  const result = await query(
-    `SELECT rr.*, rc."Name" AS "CategoryName"
-     FROM tkt.race_registration rr
-     LEFT JOIN tkt.race_category rc ON rc."CategoryId" = rr."CategoryId"
-     WHERE rr."RaceId" = $1
-       AND rr."Status" = 'finished'
-       AND ($2::INT IS NULL OR rr."CategoryId" = $2)
-     ORDER BY rr."Position" NULLS LAST, rr."ChipTime" NULLS LAST`,
-    [raceId, categoryId ?? null]
-  );
-  return result.rows;
+  return callSp("usp_tkt_race_get_results", {
+    RaceId: raceId,
+    CategoryId: categoryId ?? null,
+  });
 }
 
 /* ── FINISH ── */
 
 export async function recordFinish(registrationId: number, finishTime: string, chipTime?: string) {
-  // Calcular posición
-  const reg = await query(
-    `SELECT "RaceId", "CategoryId" FROM tkt.race_registration WHERE "RegistrationId" = $1`,
-    [registrationId]
-  );
-  if (!reg.rows.length) throw new Error("registration_not_found");
+  const rows = await callSp("usp_tkt_race_finish", {
+    RegistrationId: registrationId,
+    FinishTime: finishTime,
+    ChipTime: chipTime ?? null,
+  });
 
-  const { RaceId, CategoryId } = reg.rows[0];
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "registration_not_found"));
 
-  // Posición general
-  const posResult = await query(
-    `SELECT COUNT(*) + 1 AS "Position"
-     FROM tkt.race_registration
-     WHERE "RaceId" = $1 AND "Status" = 'finished'`,
-    [RaceId]
-  );
-  const position = Number(posResult.rows[0].Position);
+  return {
+    success: true,
+    registration: {
+      Position: result.Position,
+      CategoryPosition: result.CategoryPosition,
+    },
+  };
+}
 
-  // Posición categoría
-  const catPosResult = await query(
-    `SELECT COUNT(*) + 1 AS "CatPosition"
-     FROM tkt.race_registration
-     WHERE "RaceId" = $1 AND "CategoryId" = $2 AND "Status" = 'finished'`,
-    [RaceId, CategoryId]
-  );
-  const categoryPosition = Number(catPosResult.rows[0].CatPosition);
+/* ── LEADERBOARD ── */
 
-  const result = await query(
-    `UPDATE tkt.race_registration SET
-      "Status" = 'finished', "FinishTime" = $1, "ChipTime" = $2,
-      "Position" = $3, "CategoryPosition" = $4
-     WHERE "RegistrationId" = $5
-     RETURNING *`,
-    [finishTime, chipTime ?? finishTime, position, categoryPosition, registrationId]
-  );
+export async function getLeaderboard(raceId: number, categoryId?: number) {
+  const rows = await callSp("usp_tkt_race_leaderboard", {
+    RaceId: raceId,
+    CategoryId: categoryId ?? null,
+  });
 
-  return { success: true, registration: result.rows[0] };
+  const entries = rows as Record<string, unknown>[];
+  const leader = entries.find((r) => r.Position === 1);
+  return entries.map((r) => ({
+    registrationId: r.RegistrationId,
+    bibNumber: r.BibNumber,
+    fullName: r.FullName,
+    gender: r.Gender,
+    status: r.Status,
+    finishTime: r.FinishTime,
+    chipTime: r.ChipTime,
+    position: r.Position,
+    categoryPosition: r.CategoryPosition,
+    categoryName: r.CategoryName,
+    categoryId: r.CategoryId,
+    gap: r.ChipTime && leader?.ChipTime ? calculateGap(String(leader.ChipTime), String(r.ChipTime)) : null,
+  }));
+}
+
+function calculateGap(leaderTime: string, runnerTime: string): string {
+  const toMs = (t: string) => {
+    const p = t.split(":");
+    const s = (p[2] || "0").split(".");
+    return (parseInt(p[0]) || 0) * 3600000 + (parseInt(p[1]) || 0) * 60000 + (parseInt(s[0]) || 0) * 1000 + parseInt((s[1] || "0").padEnd(3, "0").slice(0, 3)) || 0;
+  };
+  const diff = toMs(runnerTime) - toMs(leaderTime);
+  if (diff <= 0) return "";
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return m > 0 ? `+${m}:${String(s).padStart(2, "0")}` : `+${s}s`;
+}
+
+/* ── SCAN QR ── */
+
+export async function scanRegistrationQR(barcode: string) {
+  if (!barcode) throw new Error("missing_barcode");
+
+  const rows = await callSp("usp_tkt_race_scan_qr", {
+    Barcode: barcode,
+    JwtSecret: env.jwt.secret,
+  });
+
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "invalid_barcode"));
+
+  return {
+    valid: true,
+    action: result.Action,
+    registration: result,
+  };
+}
+
+/* ── PAYMENT ── */
+
+export async function confirmRacePayment(registrationId: number, paymentRef: string) {
+  const rows = await callSp("usp_tkt_race_confirm_payment", {
+    RegistrationId: registrationId,
+    PaymentRef: paymentRef,
+  });
+
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "registration_not_found"));
+  return { success: true, registration: result };
 }
