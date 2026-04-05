@@ -633,7 +633,7 @@ function LandingPage() {
       <Box sx={{ borderTop: "1px solid rgba(255,255,255,0.06)", py: 5 }}>
         <Container maxWidth="lg" sx={{ px: { xs: 2, md: 4 } }}>
           <Grid container spacing={4}>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                 <ConfirmationNumberIcon sx={{ color: "#F59E0B" }} />
                 <Typography fontWeight={800} fontSize="1.1rem">Zentto Tickets</Typography>
@@ -642,7 +642,7 @@ function LandingPage() {
                 La plataforma integral para eventos, boletos y experiencias. Crea, vende y escanea todo en un solo lugar.
               </Typography>
             </Grid>
-            <Grid size={{ xs: 6, md: 2 }}>
+            <Grid size={{ xs: 6, sm: 6, md: 3 }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, color: "rgba(255,255,255,0.8)" }}>
                 Explorar
               </Typography>
@@ -664,34 +664,51 @@ function LandingPage() {
                 ))}
               </Stack>
             </Grid>
-            <Grid size={{ xs: 6, md: 2 }}>
+            <Grid size={{ xs: 6, sm: 6, md: 3 }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, color: "rgba(255,255,255,0.8)" }}>
                 Organizadores
               </Typography>
               <Stack spacing={1}>
-                {["Crear evento", "Editor de venues", "Dashboard"].map((link) => (
+                {[
+                  { label: "Crear evento", href: "/eventos" },
+                  { label: "Editor de venues", href: "/venues/editor" },
+                  { label: "Dashboard", href: "/eventos" },
+                ].map((link) => (
                   <Typography
-                    key={link}
+                    key={link.label}
                     variant="body2"
+                    onClick={() => router.push(link.href)}
                     sx={{ color: "rgba(255,255,255,0.4)", cursor: "pointer", "&:hover": { color: "#818CF8" }, transition: "color 0.2s" }}
                   >
-                    {link}
+                    {link.label}
                   </Typography>
                 ))}
               </Stack>
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, color: "rgba(255,255,255,0.8)" }}>
                 Soporte
               </Typography>
               <Stack spacing={1}>
-                {["Centro de ayuda", "Contacto", "Terminos de uso", "Privacidad"].map((link) => (
+                {[
+                  { label: "Centro de ayuda", href: "https://docs.zentto.net", external: true },
+                  { label: "Contacto", href: "mailto:info@zentto.net", external: true },
+                  { label: "Terminos de uso", href: "/terminos" },
+                  { label: "Privacidad", href: "/privacidad" },
+                ].map((link) => (
                   <Typography
-                    key={link}
+                    key={link.label}
                     variant="body2"
+                    onClick={() => {
+                      if ((link as any).external) {
+                        window.open(link.href, "_blank", "noopener");
+                      } else {
+                        router.push(link.href);
+                      }
+                    }}
                     sx={{ color: "rgba(255,255,255,0.4)", cursor: "pointer", "&:hover": { color: "#818CF8" }, transition: "color 0.2s" }}
                   >
-                    {link}
+                    {link.label}
                   </Typography>
                 ))}
               </Stack>
