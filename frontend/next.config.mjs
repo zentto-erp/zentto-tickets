@@ -2,10 +2,10 @@
 const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   reactStrictMode: true,
-  // basePath gestionado por nginx rewrite (strip /tickets prefix)
-  // NO usar basePath de Next.js — tiene bugs en standalone con Next 16
+  // Assets cargan desde el dominio standalone (no desde el shell ERP)
+  assetPrefix: process.env.NEXT_PUBLIC_ASSET_PREFIX || '',
   images: {
-    domains: ['localhost', 'api.zentto.net', 'tickets.zentto.net'],
+    domains: ['localhost', 'api.zentto.net', 'tickets.zentto.net', 'ticketsdev.zentto.net'],
   },
 };
 
