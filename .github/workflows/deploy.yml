@@ -1,0 +1,116 @@
+# Zentto Tickets — Deploy to Production
+# Push a main → build Docker → deploy al servidor
+# Basado en zentto-infra/templates/deploy-workflow.yml
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  APP_NAME_API: zentto-tickets-api
+  APP_NAME_FRONTEND: zentto-tickets-frontend
+  IMAGE_API: ghcr.io/zentto-erp/zentto-tickets/api:latest
+  IMAGE_FRONTEND: ghcr.io/zentto-erp/zentto-tickets/frontend:latest
+  NETWORK: zentto_zentto-net
+  ENV_FILE_API: /opt/zentto/.env.tickets-api
+  ENV_FILE_FRONTEND: /opt/zentto/.env.tickets-frontend
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build API
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: true
+          tags: ${{ env.IMAGE_API }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      # Build Frontend
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: true
+          tags: ${{ env.IMAGE_FRONTEND }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://tickets-api.zentto.net
+            NEXT_PUBLIC_ZENTTO_API_URL=https://api.zentto.net
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  deploy:
+    name: Deploy to Server
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "=== Deploy Zentto Tickets ==="
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # ── API ──
+            docker pull ${{ env.IMAGE_API }}
+            docker stop ${{ env.APP_NAME_API }} 2>/dev/null || true
+            docker rm ${{ env.APP_NAME_API }} 2>/dev/null || true
+
+            docker run -d \
+              --name ${{ env.APP_NAME_API }} \
+              --restart unless-stopped \
+              --network ${{ env.NETWORK }} \
+              -p 4700:4700 \
+              --env-file ${{ env.ENV_FILE_API }} \
+              ${{ env.IMAGE_API }}
+
+            # ── Frontend ──
+            docker pull ${{ env.IMAGE_FRONTEND }}
+            docker stop ${{ env.APP_NAME_FRONTEND }} 2>/dev/null || true
+            docker rm ${{ env.APP_NAME_FRONTEND }} 2>/dev/null || true
+
+            docker run -d \
+              --name ${{ env.APP_NAME_FRONTEND }} \
+              --restart unless-stopped \
+              --network ${{ env.NETWORK }} \
+              -p 3200:3200 \
+              --env-file ${{ env.ENV_FILE_FRONTEND }} \
+              ${{ env.IMAGE_FRONTEND }}
+
+            docker image prune -f
+
+            # Health check API
+            sleep 5
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:4700/health" || echo "000")
+            [ "$HTTP_CODE" = "200" ] && echo "API health OK" || echo "WARN: API health HTTP $HTTP_CODE"
+
+            echo "=== Deploy completado ==="

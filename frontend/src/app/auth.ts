@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100";
+const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4700";
 const ZENTTO_API = process.env.ZENTTO_API_URL || process.env.NEXT_PUBLIC_ZENTTO_API_URL || "http://localhost:4000";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({

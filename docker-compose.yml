@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     ports:
-      - "4100:4100"
+      - "4700:4700"
     env_file:
       - .env
     depends_on:
@@ -19,10 +19,10 @@ services:
       context: .
       dockerfile: docker/Dockerfile.frontend
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:4100
+        NEXT_PUBLIC_API_URL: http://localhost:4700
         NEXT_PUBLIC_ZENTTO_API_URL: http://localhost:4000
     ports:
-      - "3100:3100"
+      - "3200:3200"
     env_file:
       - .env
     depends_on:

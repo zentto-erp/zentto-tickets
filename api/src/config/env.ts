@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const env = {
-  port: parseInt(process.env.PORT || "4100", 10),
+  port: parseInt(process.env.PORT || "4700", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   jwt: {
     secret: process.env.JWT_SECRET || "change_me",
@@ -19,6 +19,6 @@ export const env = {
   },
   zenttoApiUrl: process.env.ZENTTO_API_URL || "http://localhost:4000",
   ws: {
-    port: parseInt(process.env.WS_PORT || "4101", 10),
+    port: parseInt(process.env.WS_PORT || "4701", 10),
   },
 };

@@ -1,6 +1,6 @@
 import { getSession } from "next-auth/react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4700";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getSession() as { accessToken?: string } | null;

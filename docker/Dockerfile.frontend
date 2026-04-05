@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:4100
+ARG NEXT_PUBLIC_API_URL=http://localhost:4700
 ARG NEXT_PUBLIC_ZENTTO_API_URL=http://localhost:4000
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
@@ -23,6 +23,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/public ./public
 
-EXPOSE 3100
+EXPOSE 3200
 
-CMD ["npx", "next", "start", "-p", "3100"]
+CMD ["npx", "next", "start", "-p", "3200"]
