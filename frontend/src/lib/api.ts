@@ -50,7 +50,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (typeof window !== "undefined") {
       // Limpiar cookie antes de redirigir
       await fetch("/api/auth/set-token", { method: "DELETE", credentials: "include" }).catch(() => {});
-      window.location.href = "/tickets/login";
+      window.location.href = "/login";
     }
     throw new Error("session_expired");
   }
