@@ -78,3 +78,41 @@ body {
 .fade-in-up-delay-2 { animation-delay: 0.2s; opacity: 0; }
 .fade-in-up-delay-3 { animation-delay: 0.3s; opacity: 0; }
 .fade-in-up-delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+/* Countdown timer pulse */
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.timer-pulse {
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+
+/* Slide in from bottom */
+@keyframes slideInUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-in-up {
+  animation: slideInUp 0.4s ease-out forwards;
+}
+
+/* Scale in */
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.scale-in {
+  animation: scaleIn 0.5s ease-out forwards;
+}
+
+/* Floating CTA shadow */
+@keyframes float-shadow {
+  0%, 100% { box-shadow: 0 -4px 20px rgba(99,102,241,0.15); }
+  50% { box-shadow: 0 -4px 30px rgba(99,102,241,0.25); }
+}
+
+/* Smooth number transition */
+.timer-digit {
+  font-variant-numeric: tabular-nums;
+}
