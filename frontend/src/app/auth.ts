@@ -8,6 +8,7 @@ const AUTH_SERVICE = process.env.AUTH_SERVICE_URL
   || "http://localhost:4600";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   secret: process.env.AUTH_SECRET,
   session: { strategy: "jwt", maxAge: 12 * 60 * 60 },
   pages: {
