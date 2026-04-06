@@ -31,6 +31,7 @@ import ErrorIcon from "@mui/icons-material/Error";
 import PendingIcon from "@mui/icons-material/Pending";
 import { useDashboardStats, useDashboardSales, useDashboardUpcomingEvents, useDashboardRaceStats, useDashboardVenueOccupancy } from "@/hooks/useDashboard";
 import { useErpSyncStats, useErpSyncRecent } from "@/hooks/useErpSync";
+import { brandColors } from "@/components/erp/theme";
 
 const DC: Record<string, string> = { "5K": "#10B981", "10K": "#3B82F6", "21K": "#F59E0B", "42K": "#EF4444" };
 
@@ -48,12 +49,12 @@ export default function DashboardPage() {
   if (isLoading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
 
   const kpiCards = [
-    { label: "Eventos activos", value: stats?.activeEvents ?? 0, icon: <EventIcon />, color: "#6366F1", trend: null },
-    { label: "Boletos vendidos hoy", value: stats?.totalTicketsSold ?? 0, icon: <ConfirmationNumberIcon />, color: "#10B981", trend: null },
-    { label: "Revenue hoy", value: `$${(stats?.revenueToday ?? 0).toLocaleString("es", { minimumFractionDigits: 2 })}`, icon: <AttachMoneyIcon />, color: "#F59E0B", trend: null },
-    { label: "Escaneos hoy", value: stats?.scannedToday ?? 0, icon: <QrCodeScannerIcon />, color: "#0EA5E9", trend: null },
-    { label: "Venues", value: stats?.totalVenues ?? 0, icon: <StadiumIcon />, color: "#8B5CF6", trend: null },
-    { label: "Inscritos carreras", value: stats?.totalRaceRegistrations ?? 0, icon: <DirectionsRunIcon />, color: "#EF4444", trend: null },
+    { label: "Eventos activos", value: stats?.activeEvents ?? 0, icon: <EventIcon />, color: brandColors.statBlue },
+    { label: "Boletos vendidos hoy", value: stats?.totalTicketsSold ?? 0, icon: <ConfirmationNumberIcon />, color: brandColors.statTeal },
+    { label: "Revenue hoy", value: `$${(stats?.revenueToday ?? 0).toLocaleString("es", { minimumFractionDigits: 2 })}`, icon: <AttachMoneyIcon />, color: brandColors.statOrange },
+    { label: "Escaneos hoy", value: stats?.scannedToday ?? 0, icon: <QrCodeScannerIcon />, color: brandColors.statRed },
+    { label: "Venues", value: stats?.totalVenues ?? 0, icon: <StadiumIcon />, color: brandColors.shortcutGreen },
+    { label: "Inscritos carreras", value: stats?.totalRaceRegistrations ?? 0, icon: <DirectionsRunIcon />, color: brandColors.shortcutSlate },
   ];
 
   return (
@@ -73,33 +74,19 @@ export default function DashboardPage() {
             <Paper
               sx={{
                 p: 3,
-                borderRadius: 3,
+                borderRadius: 2,
+                bgcolor: card.color,
+                color: "#fff",
                 border: "none",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
-                transition: "all 0.2s ease",
-                "&:hover": { transform: "translateY(-2px)", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" },
+                position: "relative",
+                overflow: "hidden",
               }}
             >
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                <Box>
-                  <Typography variant="caption" fontWeight={600} sx={{ color: "#64748B", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    {card.label}
-                  </Typography>
-                  <Typography variant="h4" fontWeight={800} sx={{ mt: 0.5, color: "#0F172A" }}>
-                    {card.value}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    width: 48, height: 48, borderRadius: "12px",
-                    bgcolor: `${card.color}15`, display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    color: card.color, "& svg": { fontSize: 24 },
-                  }}
-                >
-                  {card.icon}
-                </Box>
-              </Stack>
+              <Typography variant="h4" fontWeight={700}>{card.value}</Typography>
+              <Typography sx={{ opacity: 0.9, fontSize: "0.875rem" }}>{card.label}</Typography>
+              <Box sx={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "#fff", opacity: 0.3, "& svg": { fontSize: 32 } }}>
+                {card.icon}
+              </Box>
             </Paper>
           </Grid>
         ))}
