@@ -187,19 +187,19 @@ function LandingPage() {
           position: "relative",
           overflow: "hidden",
           background: "linear-gradient(135deg, #1E1B4B 0%, #312E81 40%, #1E1B4B 100%)",
-          pt: { xs: 8, md: 14 },
-          pb: { xs: 6, md: 12 },
+          pt: { xs: 6, sm: 8, md: 14 },
+          pb: { xs: 6, sm: 8, md: 12 },
         }}
       >
         {/* Decorative circles */}
         <Box sx={{
-          position: "absolute", top: -120, right: -120,
-          width: 400, height: 400, borderRadius: "50%",
+          position: "absolute", top: { xs: -80, md: -120 }, right: { xs: -80, md: -120 },
+          width: { xs: 200, md: 400 }, height: { xs: 200, md: 400 }, borderRadius: "50%",
           background: "radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)",
         }} />
         <Box sx={{
-          position: "absolute", bottom: -80, left: -80,
-          width: 300, height: 300, borderRadius: "50%",
+          position: "absolute", bottom: { xs: -50, md: -80 }, left: { xs: -50, md: -80 },
+          width: { xs: 150, md: 300 }, height: { xs: 150, md: 300 }, borderRadius: "50%",
           background: "radial-gradient(circle, rgba(245,158,11,0.1) 0%, transparent 70%)",
         }} />
 
@@ -336,9 +336,9 @@ function LandingPage() {
 
       {/* ─── FEATURED EVENTS ─── */}
       <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 }, px: { xs: 2, md: 4 } }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 4 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 4, flexWrap: "wrap", gap: 1 }}>
           <Box>
-            <Typography variant="h4" fontWeight={800} sx={{ mb: 0.5 }}>
+            <Typography variant="h4" fontWeight={800} sx={{ mb: 0.5, fontSize: { xs: "1.4rem", sm: "1.8rem", md: "2.125rem" } }}>
               Eventos destacados
             </Typography>
             <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.5)" }}>
@@ -409,7 +409,7 @@ function LandingPage() {
                       bgcolor: "rgba(99,102,241,0.85)",
                       color: "#fff",
                       fontWeight: 600,
-                      fontSize: "0.7rem",
+                      fontSize: "0.75rem",
                     }}
                   />
                   {event.hot && (
@@ -480,7 +480,7 @@ function LandingPage() {
                 border: "1px solid rgba(245,158,11,0.2)",
               }}
             />
-            <Typography variant="h3" fontWeight={800} sx={{ mb: 1.5, fontSize: { xs: "1.8rem", md: "2.4rem" } }}>
+            <Typography variant="h3" fontWeight={800} sx={{ mb: 1.5, fontSize: { xs: "1.4rem", sm: "1.8rem", md: "2.4rem" } }}>
               Organiza en 3 simples pasos
             </Typography>
             <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.5)", maxWidth: 500, mx: "auto" }}>
@@ -542,25 +542,25 @@ function LandingPage() {
       </Box>
 
       {/* ─── STATS ─── */}
-      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 }, px: { xs: 2, md: 4 } }}>
-        <Grid container spacing={3}>
+      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 }, px: { xs: 2, md: 4 } }}>
+        <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
           {STATS.map((stat) => (
             <Grid key={stat.label} size={{ xs: 6, md: 3 }}>
               <Box
                 sx={{
                   textAlign: "center",
-                  p: 3,
+                  p: { xs: 2, sm: 2.5, md: 3 },
                   borderRadius: 3,
                   border: "1px solid rgba(255,255,255,0.06)",
                   bgcolor: "rgba(255,255,255,0.02)",
                 }}
               >
-                <Box sx={{ color: "#818CF8", mb: 1 }}>{stat.icon}</Box>
+                <Box sx={{ color: "#818CF8", mb: { xs: 0.5, md: 1 }, '& svg': { fontSize: { xs: 20, md: 24 } } }}>{stat.icon}</Box>
                 <Typography
                   variant="h3"
                   sx={{
                     fontWeight: 900,
-                    fontSize: { xs: "1.8rem", md: "2.5rem" },
+                    fontSize: { xs: "1.3rem", sm: "1.6rem", md: "2.5rem" },
                     background: "linear-gradient(135deg, #fff, #A5B4FC)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
@@ -568,7 +568,14 @@ function LandingPage() {
                 >
                   {stat.value}
                 </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.5)", mt: 0.5 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "rgba(255,255,255,0.5)",
+                    mt: 0.5,
+                    fontSize: { xs: "0.75rem", sm: "0.8rem", md: "0.875rem" },
+                  }}
+                >
                   {stat.label}
                 </Typography>
               </Box>
@@ -585,7 +592,7 @@ function LandingPage() {
         }}
       >
         <Container maxWidth="md" sx={{ textAlign: "center", px: { xs: 2, md: 4 } }}>
-          <Typography variant="h3" fontWeight={800} sx={{ mb: 2, fontSize: { xs: "1.6rem", md: "2.2rem" } }}>
+          <Typography variant="h3" fontWeight={800} sx={{ mb: 2, fontSize: { xs: "1.3rem", sm: "1.6rem", md: "2.2rem" } }}>
             Listo para crear tu proximo evento?
           </Typography>
           <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.6)", mb: 4, maxWidth: 500, mx: "auto" }}>
@@ -632,7 +639,7 @@ function LandingPage() {
       {/* ─── FOOTER ─── */}
       <Box sx={{ borderTop: "1px solid rgba(255,255,255,0.06)", py: 5 }}>
         <Container maxWidth="lg" sx={{ px: { xs: 2, md: 4 } }}>
-          <Grid container spacing={4}>
+          <Grid container spacing={{ xs: 3, md: 4 }}>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                 <ConfirmationNumberIcon sx={{ color: "#F59E0B" }} />

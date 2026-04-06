@@ -223,8 +223,8 @@ function ZenttoAppBar() {
               <Avatar
                 onClick={(e) => setAnchorEl(e.currentTarget)}
                 sx={{
-                  width: 36,
-                  height: 36,
+                  width: { xs: 32, md: 36 },
+                  height: { xs: 32, md: 36 },
                   bgcolor: "#6366F1",
                   cursor: "pointer",
                   fontSize: "0.85rem",
@@ -278,10 +278,17 @@ function ZenttoAppBar() {
               </Menu>
             </>
           ) : (
-            <Box sx={{ display: "flex", gap: 1 }}>
+            <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 }, alignItems: "center" }}>
               <Button
                 onClick={() => router.push("/login")}
-                sx={{ color: "rgba(255,255,255,0.85)", fontWeight: 500, fontSize: "0.875rem" }}
+                sx={{
+                  color: "rgba(255,255,255,0.85)",
+                  fontWeight: 500,
+                  fontSize: { xs: "0.75rem", md: "0.875rem" },
+                  px: { xs: 1, md: 2 },
+                  minWidth: "auto",
+                  display: { xs: "none", sm: "inline-flex" },
+                }}
               >
                 Iniciar Sesion
               </Button>
@@ -293,10 +300,13 @@ function ZenttoAppBar() {
                   background: "linear-gradient(135deg, #F59E0B, #D97706)",
                   color: "#000",
                   fontWeight: 700,
+                  fontSize: { xs: "0.75rem", md: "0.875rem" },
+                  px: { xs: 1.5, md: 2 },
+                  whiteSpace: "nowrap",
                   "&:hover": { background: "linear-gradient(135deg, #FBBF24, #F59E0B)" },
                 }}
               >
-                Crear Evento
+                {isMobile ? "Crear" : "Crear Evento"}
               </Button>
             </Box>
           )}
