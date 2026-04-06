@@ -306,7 +306,7 @@ function ZenttoAppBar() {
                   "&:hover": { background: "linear-gradient(135deg, #FBBF24, #F59E0B)" },
                 }}
               >
-                {isMobile ? "Entrar" : "Crear Evento"}
+                {isMobile ? "Crear" : "Crear Evento"}
               </Button>
             </Box>
           )}

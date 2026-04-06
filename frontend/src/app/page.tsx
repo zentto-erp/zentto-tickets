@@ -409,7 +409,7 @@ function LandingPage() {
                       bgcolor: "rgba(99,102,241,0.85)",
                       color: "#fff",
                       fontWeight: 600,
-                      fontSize: "0.7rem",
+                      fontSize: "0.75rem",
                     }}
                   />
                   {event.hot && (
@@ -573,7 +573,7 @@ function LandingPage() {
                   sx={{
                     color: "rgba(255,255,255,0.5)",
                     mt: 0.5,
-                    fontSize: { xs: "0.7rem", sm: "0.8rem", md: "0.875rem" },
+                    fontSize: { xs: "0.75rem", sm: "0.8rem", md: "0.875rem" },
                   }}
                 >
                   {stat.label}
