@@ -24,7 +24,12 @@ import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import { useRouter } from "next/navigation";
+import SyncIcon from "@mui/icons-material/Sync";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import PendingIcon from "@mui/icons-material/Pending";
 import { useDashboardStats, useDashboardSales, useDashboardUpcomingEvents, useDashboardRaceStats, useDashboardVenueOccupancy } from "@/hooks/useDashboard";
+import { useErpSyncStats, useErpSyncRecent } from "@/hooks/useErpSync";
 
 const DC: Record<string, string> = { "5K": "#10B981", "10K": "#3B82F6", "21K": "#F59E0B", "42K": "#EF4444" };
 
@@ -36,6 +41,8 @@ export default function DashboardPage() {
   const { data: upcoming } = useDashboardUpcomingEvents();
   const { data: races } = useDashboardRaceStats();
   const { data: venues } = useDashboardVenueOccupancy();
+  const { data: syncStats } = useErpSyncStats();
+  const { data: syncRecent } = useErpSyncRecent(10);
 
   if (isLoading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
 
@@ -104,12 +111,73 @@ export default function DashboardPage() {
         </Paper></Grid>
       </Grid>
 
-      <Paper sx={{ p: 3 }}><Typography variant="h6" fontWeight={700} mb={2}><StadiumIcon sx={{ fontSize: 20, mr: 1, verticalAlign: "text-bottom" }} />Venues</Typography>
+      <Paper sx={{ p: 3, mb: 4 }}><Typography variant="h6" fontWeight={700} mb={2}><StadiumIcon sx={{ fontSize: 20, mr: 1, verticalAlign: "text-bottom" }} />Venues</Typography>
         <TableContainer><Table size="small"><TableHead><TableRow><TableCell sx={{ fontWeight: 700 }}>Venue</TableCell><TableCell sx={{ fontWeight: 700 }}>Ciudad</TableCell><TableCell align="right" sx={{ fontWeight: 700 }}>Capacidad</TableCell><TableCell align="right" sx={{ fontWeight: 700 }}>Eventos</TableCell><TableCell sx={{ fontWeight: 700, width: 200 }}>Ocupacion</TableCell></TableRow></TableHead>
           <TableBody>{(venues ?? []).map((v: any) => (<TableRow key={v.venueId}><TableCell>{v.venueName}</TableCell><TableCell>{v.city}</TableCell><TableCell align="right">{v.capacity.toLocaleString("es")}</TableCell><TableCell align="right">{v.eventCount}</TableCell>
             <TableCell><Stack direction="row" alignItems="center" gap={1}><LinearProgress variant="determinate" value={v.occupancyPct} sx={{ flex: 1, height: 8, borderRadius: 4, bgcolor: "rgba(0,0,0,0.08)", "& .MuiLinearProgress-bar": { bgcolor: v.occupancyPct >= 90 ? "#EF4444" : v.occupancyPct >= 70 ? "#F59E0B" : "#10B981" } }} /><Typography variant="caption" fontWeight={600}>{v.occupancyPct}%</Typography></Stack></TableCell>
           </TableRow>))}</TableBody>
         </Table></TableContainer>
+      </Paper>
+
+      {/* ── Panel Sincronizacion ERP ── */}
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" fontWeight={700} mb={2}>
+          <SyncIcon sx={{ fontSize: 20, mr: 1, verticalAlign: "text-bottom" }} />Sincronizacion ERP
+        </Typography>
+        <Grid container spacing={2} mb={3}>
+          {[
+            { l: "Pendientes", v: syncStats?.pending ?? 0, c: "#F59E0B", i: <PendingIcon sx={{ fontSize: 18 }} /> },
+            { l: "Sincronizados hoy", v: syncStats?.syncedToday ?? 0, c: "#10B981", i: <CheckCircleIcon sx={{ fontSize: 18 }} /> },
+            { l: "Con error", v: syncStats?.failed ?? 0, c: "#EF4444", i: <ErrorIcon sx={{ fontSize: 18 }} /> },
+          ].map((s) => (
+            <Grid key={s.l} size={{ xs: 4 }}>
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: "action.hover", textAlign: "center" }}>
+                <Box sx={{ color: s.c, mb: 0.5 }}>{s.i}</Box>
+                <Typography variant="h5" fontWeight={800}>{s.v}</Typography>
+                <Typography variant="caption" color="text.secondary">{s.l}</Typography>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
+        <TableContainer sx={{ maxHeight: 300 }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Orden</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Estado</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Intentos</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Creado</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Sincronizado</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(syncRecent ?? []).map((s: any) => (
+                <TableRow key={s.SyncId}>
+                  <TableCell>{s.SyncId}</TableCell>
+                  <TableCell>#{s.OrderId}</TableCell>
+                  <TableCell>
+                    <Chip label={s.EventType === "payment_received" ? "Pago" : s.EventType === "refund" ? "Reembolso" : "Orden"} size="small" />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={s.Status === "synced" ? "Sincronizado" : s.Status === "failed" ? "Error" : "Pendiente"}
+                      size="small"
+                      color={s.Status === "synced" ? "success" : s.Status === "failed" ? "error" : "warning"}
+                    />
+                  </TableCell>
+                  <TableCell>{s.Attempts}</TableCell>
+                  <TableCell>{new Date(s.CreatedAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</TableCell>
+                  <TableCell>{s.SyncedAt ? new Date(s.SyncedAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</TableCell>
+                </TableRow>
+              ))}
+              {(syncRecent ?? []).length === 0 && (
+                <TableRow><TableCell colSpan={7} align="center"><Typography color="text.secondary" variant="body2">Sin sincronizaciones</Typography></TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Paper>
     </Box>
   );
