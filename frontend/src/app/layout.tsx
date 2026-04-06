@@ -34,6 +34,8 @@ import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import LogoutIcon from "@mui/icons-material/Logout";
 import CloseIcon from "@mui/icons-material/Close";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import { useRouter, usePathname } from "next/navigation";
 import "@/app/globals.css";
 
@@ -115,6 +117,7 @@ const PUBLIC_NAV = [
 
 /* ---------- Authenticated nav links ---------- */
 const AUTH_NAV = [
+  { label: "Mi Cuenta", href: "/mi-cuenta", icon: <AccountCircleIcon /> },
   { label: "Mis Boletos", href: "/boletos", icon: <ConfirmationNumberIcon /> },
   { label: "Scanner", href: "/scan", icon: <QrCodeScannerIcon /> },
 ];
@@ -131,7 +134,7 @@ function ZenttoAppBar() {
   const allNav = isAuthenticated ? [...PUBLIC_NAV, ...AUTH_NAV] : PUBLIC_NAV;
 
   // Hide AppBar on login page
-  if (pathname === "/login") return null;
+  if (pathname === "/login" || pathname === "/register") return null;
 
   const initials = session?.user?.name
     ? session.user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -295,6 +298,21 @@ function ZenttoAppBar() {
               <Button
                 variant="contained"
                 size="small"
+                onClick={() => router.push("/register")}
+                sx={{
+                  background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
+                  fontWeight: 700,
+                  fontSize: { xs: "0.75rem", md: "0.875rem" },
+                  px: { xs: 1.5, md: 2 },
+                  whiteSpace: "nowrap",
+                  "&:hover": { background: "linear-gradient(135deg, #4F46E5, #7C3AED)" },
+                }}
+              >
+                Registrarse
+              </Button>
+              <Button
+                variant="contained"
+                size="small"
                 onClick={() => router.push("/login")}
                 sx={{
                   background: "linear-gradient(135deg, #F59E0B, #D97706)",
@@ -304,9 +322,10 @@ function ZenttoAppBar() {
                   px: { xs: 1.5, md: 2 },
                   whiteSpace: "nowrap",
                   "&:hover": { background: "linear-gradient(135deg, #FBBF24, #F59E0B)" },
+                  display: { xs: "none", sm: "inline-flex" },
                 }}
               >
-                {isMobile ? "Crear" : "Crear Evento"}
+                Crear Evento
               </Button>
             </Box>
           )}
