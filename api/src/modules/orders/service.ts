@@ -1,6 +1,7 @@
 import { callSp } from "../../db/query.js";
 import { env } from "../../config/env.js";
 import { notify, TEMPLATES } from "../../notifications/notify.js";
+import { enqueueSync } from "../erp-sync/service.js";
 
 /* ── ORDERS ── */
 
@@ -87,6 +88,11 @@ export async function confirmPayment(orderId: number, paymentRef: string, paymen
 
   // Send confirmation email (fire and forget)
   sendOrderConfirmation(result).catch(() => {});
+
+  // Encolar sincronización contable con el ERP (fire and forget)
+  enqueueSync(orderId, "payment_received").catch((err) => {
+    console.error("[erp-sync] Error encolando sync:", err);
+  });
 
   return { success: true, order: result };
 }
