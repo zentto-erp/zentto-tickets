@@ -1,7 +1,7 @@
-import crypto from "crypto";
-import { query } from "../../db/pool.js";
+import { callSp } from "../../db/query.js";
 import { env } from "../../config/env.js";
 import { notify, TEMPLATES } from "../../notifications/notify.js";
+import { enqueueSync } from "../erp-sync/service.js";
 
 /* ── ORDERS ── */
 
@@ -14,39 +14,24 @@ interface ListOrdersParams {
 
 export async function listOrders(params: ListOrdersParams) {
   const { userId, companyId, page = 1, limit = 20 } = params;
-  const offset = (page - 1) * limit;
 
-  const result = await query(
-    `SELECT o.*, e."Name" AS "EventName", e."EventDate",
-       v."Name" AS "VenueName",
-       COUNT(*) OVER() AS "TotalCount",
-       (SELECT COUNT(*) FROM tkt.ticket t WHERE t."OrderId" = o."OrderId") AS "TicketCount"
-     FROM tkt."order" o
-     JOIN tkt.event e ON e."EventId" = o."EventId"
-     JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
-     JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
-     WHERE o."UserId" = $1 AND o."CompanyId" = $2
-     ORDER BY o."CreatedAt" DESC
-     LIMIT $3 OFFSET $4`,
-    [userId, companyId, limit, offset]
-  );
+  const rows = await callSp("usp_tkt_order_list", {
+    UserId: userId,
+    CompanyId: companyId,
+    Page: page,
+    Limit: limit,
+  });
 
-  const total = result.rows[0]?.TotalCount ?? 0;
-  return { rows: result.rows, total: Number(total), page, limit };
+  const total = Number((rows[0] as Record<string, unknown>)?.TotalCount ?? 0);
+  return { rows, total, page, limit };
 }
 
 export async function getOrder(orderId: number, userId: string) {
-  const result = await query(
-    `SELECT o.*, e."Name" AS "EventName", e."EventDate",
-       v."Name" AS "VenueName"
-     FROM tkt."order" o
-     JOIN tkt.event e ON e."EventId" = o."EventId"
-     JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
-     JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
-     WHERE o."OrderId" = $1 AND o."UserId" = $2`,
-    [orderId, userId]
-  );
-  return result.rows[0] ?? null;
+  const rows = await callSp("usp_tkt_order_get", {
+    OrderId: orderId,
+    UserId: userId,
+  });
+  return rows[0] ?? null;
 }
 
 /* ── CHECKOUT ── */
@@ -64,110 +49,80 @@ interface CheckoutParams {
 export async function checkout(params: CheckoutParams) {
   const { eventId, seatIds, userId, companyId, buyerName, buyerEmail, buyerPhone } = params;
 
-  // Validar que los asientos están held por este usuario
-  const held = await query(
-    `SELECT ei."SeatId", pz."Price", pz."Currency"
-     FROM tkt.event_inventory ei
-     JOIN tkt.pricing_zone_section pzs ON pzs."SectionId" = ei."SectionId"
-     JOIN tkt.pricing_zone pz ON pz."ZoneId" = pzs."ZoneId" AND pz."EventId" = ei."EventId"
-     WHERE ei."EventId" = $1
-       AND ei."SeatId" = ANY($2::INT[])
-       AND ei."HeldBy" = $3
-       AND ei."Status" = 'held'`,
-    [eventId, seatIds, userId]
-  );
+  const rows = await callSp("usp_tkt_order_checkout", {
+    EventId: eventId,
+    SeatIds: seatIds,
+    UserId: userId,
+    CompanyId: companyId,
+    BuyerName: buyerName,
+    BuyerEmail: buyerEmail,
+    BuyerPhone: buyerPhone ?? null,
+    JwtSecret: env.jwt.secret,
+  });
 
-  if (held.rows.length !== seatIds.length) {
-    throw new Error("some_seats_not_held");
-  }
-
-  const total = held.rows.reduce((sum, r) => sum + Number(r.Price), 0);
-  const currency = held.rows[0]?.Currency ?? "USD";
-
-  // Crear orden
-  const orderResult = await query(
-    `INSERT INTO tkt."order"
-      ("CompanyId", "EventId", "UserId", "BuyerName", "BuyerEmail", "BuyerPhone",
-       "Total", "Currency", "Status")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_payment')
-     RETURNING *`,
-    [companyId, eventId, userId, buyerName, buyerEmail, buyerPhone ?? null, total, currency]
-  );
-  const order = orderResult.rows[0];
-
-  // Crear tickets con QR
-  for (const seat of held.rows) {
-    const barcode = generateBarcode(Number(order.OrderId), eventId, Number(seat.SeatId));
-    await query(
-      `INSERT INTO tkt.ticket
-        ("OrderId", "EventId", "SeatId", "Barcode", "Price", "Currency", "Status")
-       VALUES ($1,$2,$3,$4,$5,$6,'active')`,
-      [order.OrderId, eventId, seat.SeatId, barcode, seat.Price, seat.Currency]
-    );
-  }
-
-  // Marcar asientos como sold
-  await query(
-    `UPDATE tkt.event_inventory SET
-      "Status" = 'sold', "OrderId" = $1, "HeldBy" = NULL, "HeldUntil" = NULL
-     WHERE "EventId" = $2 AND "SeatId" = ANY($3::INT[])`,
-    [order.OrderId, eventId, seatIds]
-  );
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "checkout_failed"));
 
   return {
     success: true,
-    order: { ...order, ticketCount: seatIds.length },
+    order: {
+      OrderId: result.OrderId,
+      Total: result.Total,
+      Currency: result.Currency,
+      ticketCount: Number(result.TicketCount),
+    },
   };
 }
 
 /* ── CONFIRM PAYMENT ── */
 
 export async function confirmPayment(orderId: number, paymentRef: string, paymentMethod: string) {
-  const result = await query(
-    `UPDATE tkt."order" SET
-      "Status" = 'paid', "PaymentRef" = $1, "PaymentMethod" = $2, "PaidAt" = NOW()
-     WHERE "OrderId" = $3 AND "Status" = 'pending_payment'
-     RETURNING *`,
-    [paymentRef, paymentMethod, orderId]
-  );
+  const rows = await callSp("usp_tkt_order_confirm_payment", {
+    OrderId: orderId,
+    PaymentRef: paymentRef,
+    PaymentMethod: paymentMethod,
+  });
 
-  if (!result.rows.length) throw new Error("order_not_found_or_already_paid");
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "order_not_found_or_already_paid"));
 
-  // Notificar al comprador
-  const paid = result.rows[0];
-  const event = await query(
-    `SELECT e."Name", e."EventDate", v."Name" AS "VenueName"
-     FROM tkt.event e
-     JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
-     JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
-     WHERE e."EventId" = $1`,
-    [paid.EventId]
-  );
-  const ev = event.rows[0];
-  const ticketCount = await query(
-    `SELECT COUNT(*) AS c FROM tkt.ticket WHERE "OrderId" = $1`, [orderId]
-  );
+  // Send confirmation email (fire and forget)
+  sendOrderConfirmation(result).catch(() => {});
 
-  sendOrderConfirmation(paid, ev, Number(ticketCount.rows[0]?.c ?? 0)).catch(() => {});
+  // Encolar sincronización contable con el ERP (fire and forget)
+  enqueueSync(orderId, "payment_received").catch((err) => {
+    console.error("[erp-sync] Error encolando sync:", err);
+  });
 
-  return { success: true, order: paid };
+  return { success: true, order: result };
 }
 
-async function sendOrderConfirmation(order: Record<string, unknown>, event: Record<string, unknown>, ticketCount: number) {
+async function sendOrderConfirmation(order: Record<string, unknown>) {
   if (!env.notifyApiKey) return;
+
+  // Get event details for email
+  const events = await callSp("usp_tkt_event_get", { EventId: Number(order.EventId) });
+  const ev = events[0] as Record<string, unknown> | undefined;
+  if (!ev) return;
+
+  const tickets = await callSp("usp_tkt_order_get_tickets", {
+    OrderId: Number(order.OrderId),
+    UserId: "", // admin context — the SP fetches all tickets for the order
+  });
+
   try {
     await notify.email.send({
       to: String(order.BuyerEmail),
       templateId: TEMPLATES.ORDER_CONFIRMATION,
       variables: {
         buyerName: String(order.BuyerName),
-        eventName: String(event.Name),
-        eventDate: new Date(String(event.EventDate)).toLocaleDateString("es", {
+        eventName: String(ev.Name),
+        eventDate: new Date(String(ev.EventDate)).toLocaleDateString("es", {
           weekday: "long", day: "numeric", month: "long", year: "numeric",
           hour: "2-digit", minute: "2-digit",
         }),
-        venueName: String(event.VenueName),
-        ticketCount: String(ticketCount),
+        venueName: String(ev.VenueName),
+        ticketCount: String(tickets.length),
         total: Number(order.Total).toFixed(2),
         currency: String(order.Currency),
         orderId: String(order.OrderId),
@@ -175,52 +130,35 @@ async function sendOrderConfirmation(order: Record<string, unknown>, event: Reco
       track: true,
     });
   } catch (err) {
-    console.error("[notify] Error enviando confirmación:", err);
+    console.error("[notify] Error enviando confirmacion:", err);
   }
 }
 
 /* ── CANCEL ── */
 
 export async function cancelOrder(orderId: number, userId: string) {
-  const order = await query(
-    `SELECT * FROM tkt."order" WHERE "OrderId" = $1 AND "UserId" = $2`,
-    [orderId, userId]
-  );
-  if (!order.rows.length) throw new Error("order_not_found");
+  const rows = await callSp("usp_tkt_order_cancel", {
+    OrderId: orderId,
+    UserId: userId,
+  });
 
-  // Liberar asientos
-  await query(
-    `UPDATE tkt.event_inventory SET
-      "Status" = 'available', "OrderId" = NULL, "HeldBy" = NULL, "HeldUntil" = NULL
-     WHERE "OrderId" = $1`,
-    [orderId]
-  );
+  const result = rows[0] as Record<string, unknown>;
+  if (!result?.ok) throw new Error(String(result?.mensaje ?? "order_not_found"));
 
-  // Cancelar tickets
-  await query(
-    `UPDATE tkt.ticket SET "Status" = 'cancelled' WHERE "OrderId" = $1`,
-    [orderId]
-  );
+  // Send cancellation email (fire and forget)
+  if (env.notifyApiKey && result.BuyerEmail) {
+    const events = await callSp("usp_tkt_event_get", { EventId: Number(result.EventId) });
+    const ev = events[0] as Record<string, unknown> | undefined;
 
-  // Cancelar orden
-  await query(
-    `UPDATE tkt."order" SET "Status" = 'cancelled' WHERE "OrderId" = $1`,
-    [orderId]
-  );
-
-  // Notificar cancelación
-  const o = order.rows[0];
-  if (env.notifyApiKey && o.BuyerEmail) {
-    const ev = await query(`SELECT "Name" FROM tkt.event WHERE "EventId" = $1`, [o.EventId]);
     notify.email.send({
-      to: String(o.BuyerEmail),
+      to: String(result.BuyerEmail),
       templateId: TEMPLATES.TICKET_CANCELLED,
       variables: {
-        buyerName: String(o.BuyerName),
-        eventName: String(ev.rows[0]?.Name ?? ""),
+        buyerName: String(result.BuyerName),
+        eventName: String(ev?.Name ?? ""),
         orderId: String(orderId),
-        total: Number(o.Total).toFixed(2),
-        currency: String(o.Currency),
+        total: Number(result.Total).toFixed(2),
+        currency: String(result.Currency),
       },
     }).catch(() => {});
   }
@@ -231,35 +169,8 @@ export async function cancelOrder(orderId: number, userId: string) {
 /* ── TICKETS ── */
 
 export async function getOrderTickets(orderId: number, userId: string) {
-  const result = await query(
-    `SELECT t.*, r."Label" AS "RowLabel", st."Number" AS "SeatNumber",
-       s."Name" AS "SectionName", s."Code" AS "SectionCode",
-       e."Name" AS "EventName", e."EventDate",
-       v."Name" AS "VenueName"
-     FROM tkt.ticket t
-     JOIN tkt."order" o ON o."OrderId" = t."OrderId"
-     JOIN tkt.event e ON e."EventId" = t."EventId"
-     JOIN tkt.venue_configuration vc ON vc."ConfigurationId" = e."ConfigurationId"
-     JOIN tkt.venue v ON v."VenueId" = vc."VenueId"
-     LEFT JOIN tkt.seat st ON st."SeatId" = t."SeatId"
-     LEFT JOIN tkt.row r ON r."RowId" = st."RowId"
-     LEFT JOIN tkt.section s ON s."SectionId" = r."SectionId"
-     WHERE t."OrderId" = $1 AND o."UserId" = $2
-     ORDER BY s."SortOrder", r."SortOrder", st."Number"`,
-    [orderId, userId]
-  );
-  return result.rows;
-}
-
-/* ── QR / BARCODE ── */
-
-function generateBarcode(orderId: number, eventId: number, seatId: number): string {
-  const timestamp = Date.now();
-  const payload = `${orderId}|${eventId}|${seatId}|${timestamp}`;
-  const hmac = crypto
-    .createHmac("sha256", env.jwt.secret)
-    .update(payload)
-    .digest("hex")
-    .slice(0, 16);
-  return `ZT-${payload}|${hmac}`;
+  return callSp("usp_tkt_order_get_tickets", {
+    OrderId: orderId,
+    UserId: userId,
+  });
 }

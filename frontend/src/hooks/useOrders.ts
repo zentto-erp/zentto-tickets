@@ -59,6 +59,15 @@ export function useConfirmPayment() {
   });
 }
 
+export function useCreatePaymentIntent() {
+  return useMutation({
+    mutationFn: ({ orderId }: { orderId: number }) =>
+      api.post<{ clientSecret: string; paymentIntentId: string }>("/v1/payments/create-intent", {
+        orderId,
+      }),
+  });
+}
+
 export function useCancelOrder() {
   const qc = useQueryClient();
   return useMutation({
