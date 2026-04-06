@@ -23,4 +23,9 @@ export const env = {
   ws: {
     port: parseInt(process.env.WS_PORT || "4701", 10),
   },
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY || "",
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || "",
+  },
 };

@@ -24,6 +24,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(morgan("short"));
+
 // Stripe webhook needs raw body — mount BEFORE json parser
 app.use("/v1/payments/webhook", paymentWebhookRouter);
 
