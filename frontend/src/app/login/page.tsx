@@ -73,11 +73,13 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <Stack spacing={3}>
-              <TextField label="Usuario" fullWidth value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" disabled={loading} required />
+              <TextField label="Usuario" fullWidth value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" disabled={loading} required
+                sx={{ "& input:-webkit-autofill": { WebkitBoxShadow: "0 0 0 100px transparent inset", WebkitTextFillColor: "inherit", transition: "background-color 5000s ease-in-out 0s" } }}
+              />
               <TextField
-                label="Contrasena" type="text" fullWidth value={password} onChange={(e) => setPassword(e.target.value)}
+                label="Contrasena" type={showPassword ? "text" : "password"} fullWidth value={password} onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password" disabled={loading} required
-                sx={{ "& input": { ...(!showPassword && { WebkitTextSecurity: "disc", textSecurity: "disc" } as any) } }}
+                sx={{ "& input:-webkit-autofill": { WebkitBoxShadow: "0 0 0 100px transparent inset", WebkitTextFillColor: "inherit", transition: "background-color 5000s ease-in-out 0s" } }}
                 slotProps={{
                   input: {
                     endAdornment: password ? (
