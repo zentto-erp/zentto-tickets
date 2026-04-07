@@ -23,9 +23,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import Link from 'next/link';
-
-const AUTH_SERVICE_URL =
-  process.env.NEXT_PUBLIC_AUTH_SERVICE_URL ?? 'http://localhost:4600';
+import { authClient, AuthClientError } from '@/lib/auth';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -53,26 +51,13 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const registerRes = await fetch(
-        `${AUTH_SERVICE_URL}/auth/register-for-app`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            email,
-            phone,
-            password,
-            appId: 'zentto-tickets',
-            role: 'buyer',
-          }),
-        },
-      );
-
-      if (!registerRes.ok) {
-        const data = await registerRes.json().catch(() => ({}));
-        throw new Error(data.message ?? 'Error al registrar.');
-      }
+      await authClient.registerForApp({
+        email,
+        password,
+        displayName: name,
+        role: 'buyer',
+        metadata: { phone },
+      });
 
       /* Auto-login */
       const loginResult = await signIn('credentials', {
@@ -88,7 +73,11 @@ export default function RegisterPage() {
       }
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Error de conexion.',
+        err instanceof AuthClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Error de conexion.',
       );
     } finally {
       setLoading(false);
