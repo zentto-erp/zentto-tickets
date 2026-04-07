@@ -17,10 +17,22 @@ export interface AuthenticatedRequest extends Request {
 const PUBLIC_PATHS = new Set(["/health", "/ws"]);
 
 /**
+ * Detecta si la request viene de un navegador (defensa contra XSS).
+ */
+function isBrowserUserAgent(ua: string | undefined): boolean {
+  if (!ua) return false;
+  return /Mozilla|Chrome|Safari|Firefox|Edge|Opera|Webkit/i.test(ua);
+}
+
+/**
  * Middleware que valida JWT emitido por zentto-auth microservice.
- * Acepta token via:
- *   - Header: Authorization: Bearer <token>
- *   - Cookie: zentto_access=<token>
+ *
+ * Browsers: SOLO cookie HttpOnly zentto_token / zentto_access.
+ * Server-to-server (sin User-Agent de browser): acepta tambien Bearer.
+ *
+ * Si una request llega desde un navegador con Authorization: Bearer (en
+ * vez de cookie HttpOnly) la rechazamos. Eso significa que JavaScript leyo
+ * el token de algun lado (XSS, localStorage, etc.) y nunca debe pasar.
  *
  * Headers opcionales para override de scope:
  *   - x-company-id, x-branch-id
@@ -28,23 +40,27 @@ const PUBLIC_PATHS = new Set(["/health", "/ws"]);
 export function requireJwt(req: Request, res: Response, next: NextFunction) {
   if (PUBLIC_PATHS.has(req.path)) return next();
 
-  // Extraer token de header o cookie
-  let token: string | undefined;
-
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    token = authHeader.slice(7);
-  }
-
-  // Fallback: cookie zentto_access (emitida por zentto-auth)
-  if (!token && req.headers.cookie) {
+  // Extraer cookie y bearer en paralelo para poder validar la combinacion
+  let cookieToken: string | undefined;
+  if (req.headers.cookie) {
     const cookies = req.headers.cookie.split(";").reduce((acc, c) => {
       const [k, v] = c.trim().split("=");
       if (k && v) acc[k] = v;
       return acc;
     }, {} as Record<string, string>);
-    token = cookies["zentto_access"];
+    cookieToken = cookies["zentto_token"] || cookies["zentto_access"];
   }
+
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+
+  const fromBrowser = isBrowserUserAgent(req.headers["user-agent"] as string | undefined);
+
+  if (fromBrowser && bearerToken && !cookieToken) {
+    return res.status(401).json({ error: "browser_bearer_rejected" });
+  }
+
+  const token = cookieToken ?? bearerToken;
 
   if (!token) {
     return res.status(401).json({ error: "missing_token" });
