@@ -75,5 +75,24 @@ jobs:
 
             sleep 5
             curl -s -o /dev/null -w "API: %{http_code}\n" http://localhost:${API_PORT}/health
+
+            # ── Migraciones goose + seeds idempotentes ───────────────
+            echo "=== Aplicando migraciones goose + seeds ==="
+            chmod +x "$REPO_DIR/scripts/goose-deploy.sh"
+            ENV_API_FILE="${ENV_DIR}/.env.tickets-api"
+            if [ -f "$ENV_API_FILE" ]; then
+              export PG_DATABASE=$(grep -E '^PG_DATABASE=' "$ENV_API_FILE" | cut -d= -f2-)
+              export PG_USER=$(grep -E '^PG_USER=' "$ENV_API_FILE" | cut -d= -f2-)
+              export PG_PASSWORD=$(grep -E '^PG_PASSWORD=' "$ENV_API_FILE" | cut -d= -f2-)
+              export PG_HOST=$(grep -E '^PG_HOST=' "$ENV_API_FILE" | cut -d= -f2- | sed 's|172\.18\.0\.1|127.0.0.1|; s|172\.19\.0\.1|127.0.0.1|')
+              export GOOSE_DIR="$REPO_DIR/migrations/postgres"
+              export SEEDS_DIR="$REPO_DIR/migrations/seeds"
+              export APP_NAME="zentto-tickets"
+              export APP_SCHEMA="tkt"
+              "$REPO_DIR/scripts/goose-deploy.sh" || echo "WARN: goose-deploy.sh fallo (continuando)"
+            else
+              echo "WARN: $ENV_API_FILE no existe — skip migraciones"
+            fi
+
             docker image prune -f
             echo "=== Deploy completado ==="
