@@ -48,7 +48,8 @@ export function requireJwt(req: Request, res: Response, next: NextFunction) {
       if (k && v) acc[k] = v;
       return acc;
     }, {} as Record<string, string>);
-    cookieToken = cookies["zentto_token"] || cookies["zentto_access"];
+    // Cookie con prefix __Secure- (preferida) o legacy zentto_token / zentto_access
+    cookieToken = cookies["__Secure-zentto_token"] || cookies["zentto_token"] || cookies["zentto_access"];
   }
 
   const authHeader = req.headers.authorization;
