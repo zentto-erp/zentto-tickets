@@ -1,4 +1,30 @@
-# Zentto Tickets
+<p align="center">
+  <img src="https://zentto.net/favicon.svg" width="64" alt="Zentto Logo" />
+</p>
+
+<h1 align="center">Zentto Tickets</h1>
+
+<p align="center">
+  <strong>Sistema de ticketing, eventos y experiencias con mapas interactivos de asientos y carreras de calle.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/stack-Node%20%7C%20Next.js%20%7C%20PostgreSQL-blue" alt="Stack" />
+  <img src="https://img.shields.io/badge/api-:4700-orange" alt="API port" />
+  <img src="https://img.shields.io/badge/web-:3300-orange" alt="Web port" />
+  <img src="https://img.shields.io/badge/schema-tkt-336791" alt="PG schema" />
+  <img src="https://img.shields.io/badge/license-proprietary-lightgrey" alt="License" />
+</p>
+
+<p align="center">
+  <a href="#arquitectura">Arquitectura</a> ·
+  <a href="#modulos">Módulos</a> ·
+  <a href="#desarrollo-local">Desarrollo local</a> ·
+  <a href="#api-endpoints">API</a> ·
+  <a href="#ecosistema-zentto">Ecosistema</a>
+</p>
+
+---
 
 Sistema de ticketing, eventos y experiencias integrado al ecosistema **Zentto ERP**.
 
@@ -198,6 +224,31 @@ npm run dev
 |--------|------|-------------|
 | POST | `/validate` | Validar QR de boleto |
 
+## Ecosistema Zentto
+
+Este repositorio forma parte del ecosistema **Zentto**:
+
+| Repo | Descripcion |
+|------|-------------|
+| [`zentto-web`](https://github.com/zentto-erp/zentto-web) | Core ERP y auth JWT compartido |
+| [`zentto-infra`](https://github.com/zentto-erp/zentto-infra) | Infra compartida (Postgres, Redis, Nginx) |
+| [`zentto-notify`](https://github.com/zentto-erp/zentto-notify) | Notificaciones (email/SMS de boletos) |
+| [`zentto-report`](https://github.com/zentto-erp/zentto-report) | Motor de reportes y boletos PDF |
+| [`zentto-erp-docs`](https://github.com/zentto-erp/zentto-erp-docs) | Documentacion oficial |
+
+## Convenciones
+
+- **Branch desde `developer`**, PR a `developer`, merge final a `main`.
+- **Commits** sin coautores automaticos.
+- **Migraciones**: goose en `migrations/postgres/` — nunca editar SPs en caliente.
+- **UI**: tablas con `<zentto-grid>` (nunca `<table>` HTML nativo).
+
 ## Licencia
 
 Privado — Zentto ERP. Todos los derechos reservados.
+
+---
+
+<p align="center">
+  Hecho con cariño por el equipo <a href="https://zentto.net">Zentto</a>
+</p>

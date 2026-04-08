@@ -1,11 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-
-// zentto-auth es el microservicio centralizado de autenticación
-// Todas las apps nuevas (tickets, sites, panel) autentican contra él
-const AUTH_SERVICE = process.env.AUTH_SERVICE_URL
-  || process.env.NEXT_PUBLIC_AUTH_URL
-  || "http://localhost:4600";
+import { getServerAuthClient } from "@/lib/auth";
+import { AuthClientError } from "@zentto/auth-client";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -25,20 +21,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!credentials?.username || !credentials?.password) return null;
 
         try {
-          // POST /auth/login en zentto-auth microservice
-          const res = await fetch(`${AUTH_SERVICE}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: credentials.username,
-              password: credentials.password,
-              appId: "zentto-tickets",
-            }),
-          });
-
-          if (!res.ok) return null;
-
-          const data = await res.json();
+          // Login via @zentto/auth-client (server-side)
+          let data: {
+            user?: {
+              userId?: string | number;
+              username?: string;
+              displayName?: string;
+              email?: string;
+              isAdmin?: boolean;
+              roles?: string[];
+              companyAccesses?: unknown[];
+            };
+            accessToken?: string;
+            refreshToken?: string;
+          };
+          try {
+            data = (await getServerAuthClient().login({
+              username: credentials.username as string,
+              password: credentials.password as string,
+            })) as unknown as typeof data;
+          } catch (err) {
+            if (err instanceof AuthClientError) return null;
+            throw err;
+          }
           if (!data.user) return null;
 
           // zentto-auth retorna { user, accessToken, refreshToken }
@@ -116,7 +121,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      const s = session as Record<string, unknown>;
+      const s = session as unknown as Record<string, unknown>;
       s.accessToken = token.accessToken;
       s.isAdmin = token.isAdmin;
       s.roles = token.roles;
@@ -128,25 +133,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 });
 
 /**
- * Refresh token contra zentto-auth
+ * Refresh token via @zentto/auth-client
  */
-async function refreshAccessToken(refreshToken: string) {
-  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL
-    || process.env.NEXT_PUBLIC_AUTH_URL
-    || "http://localhost:4600";
-
+async function refreshAccessToken(_refreshToken: string) {
   try {
-    const res = await fetch(`${AUTH_SERVICE}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `zentto_refresh=${refreshToken}`,
-      },
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
+    const data = (await getServerAuthClient().refresh()) as unknown as {
+      accessToken?: string;
+      refreshToken?: string;
+    };
+    if (!data?.accessToken) return null;
     return {
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,
